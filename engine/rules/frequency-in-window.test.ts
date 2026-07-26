@@ -22,10 +22,10 @@ const iv = (entityId: string, minute: number, state = "Charging", metadata = {})
   metadata,
 })
 
-const ctx = (intervals: Interval[]): EvalContext => ({
+const ctx = (intervals: Interval[], now = new Date("2026-07-25T10:30:00.000Z")): EvalContext => ({
   intervals,
   events: [],
-  now: new Date("2026-07-25T10:30:00.000Z"),
+  now,
 })
 
 describe("evaluateFrequencyInWindow", () => {
@@ -115,17 +115,17 @@ describe("evaluateFrequencyInWindow", () => {
     expect(detection!.evidence.groupBy).toBeNull()
   })
 
-  it("dedupKey incluye el windowStartIso completo", () => {
-    // windowStart = 10:30:00 - 15min = 10:15:00
-    // windowStartIso should be "2026-07-25T10:15:00.000Z"
+  it("dedupKey se anclá al latestStartedAt de los intervalos", () => {
+    // The latest interval is at minute 25 (10:25:00)
+    // dedupKey should use this timestamp, not the window start
     const [detection] = evaluateFrequencyInWindow(
       rule,
       ctx([iv("A", 20), iv("A", 22), iv("A", 25)]),
     )
-    expect(detection!.dedupKey).toBe("demand-spike:A:2026-07-25T10:15:00.000Z")
+    expect(detection!.dedupKey).toBe("demand-spike:A:2026-07-25T10:25:00.000Z")
   })
 
-  it("dedupKey con groupBy incluye el valor del grupo", () => {
+  it("dedupKey con groupBy incluye el valor del grupo y el latestStartedAt", () => {
     const grouped = { ...rule, groupBy: "zone" } as const
     const [detection] = evaluateFrequencyInWindow(
       grouped,
@@ -135,6 +135,43 @@ describe("evaluateFrequencyInWindow", () => {
         iv("C", 25, "Charging", { zone: "norte" }),
       ]),
     )
-    expect(detection!.dedupKey).toBe("demand-spike:norte:2026-07-25T10:15:00.000Z")
+    expect(detection!.dedupKey).toBe("demand-spike:norte:2026-07-25T10:25:00.000Z")
+  })
+
+  // Regression guards: dedupKey must be stable per occurrence (data-anchored) not per tick (clock-anchored)
+
+  it("mismo conjunto de intervalos produce el mismo dedupKey en diferentes ticks (dedup stability)", () => {
+    // If dedupKey were anchored to windowStart (clock), it would change every tick
+    // With latestStartedAt anchor (data), the same intervals should produce the same key
+    const intervals = [iv("A", 20), iv("A", 22), iv("A", 25)]
+
+    // Evaluate at one time
+    const [detection1] = evaluateFrequencyInWindow(rule, ctx(intervals))
+
+    // Evaluate at a later time, but intervals still in window (e.g., 10:31:00)
+    // windowStart becomes 10:16:00 instead of 10:15:00, but the intervals are still counted
+    const [detection2] = evaluateFrequencyInWindow(
+      rule,
+      ctx(intervals, new Date("2026-07-25T10:31:00.000Z")),
+    )
+
+    // Both should produce the same dedupKey (anchored to interval data, not window)
+    expect(detection1!.dedupKey).toBe(detection2!.dedupKey)
+    expect(detection1!.dedupKey).toBe("demand-spike:A:2026-07-25T10:25:00.000Z")
+  })
+
+  it("nuevo intervalo más reciente cambia el dedupKey", () => {
+    // When a newer interval enters the window, latestStartedAt changes, so dedupKey changes
+    const intervals1 = [iv("A", 20), iv("A", 22), iv("A", 25)]
+    const [detection1] = evaluateFrequencyInWindow(rule, ctx(intervals1))
+
+    // Now add a newer interval at minute 28
+    const intervals2 = [iv("A", 20), iv("A", 22), iv("A", 25), iv("A", 28)]
+    const [detection2] = evaluateFrequencyInWindow(rule, ctx(intervals2))
+
+    // Different latestStartedAt means different dedupKey
+    expect(detection1!.dedupKey).toBe("demand-spike:A:2026-07-25T10:25:00.000Z")
+    expect(detection2!.dedupKey).toBe("demand-spike:A:2026-07-25T10:28:00.000Z")
+    expect(detection1!.dedupKey).not.toBe(detection2!.dedupKey)
   })
 })

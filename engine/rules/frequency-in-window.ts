@@ -4,9 +4,8 @@ type FrequencyRule = Extract<Rule, { type: "frequency_in_window" }>
 
 export function evaluateFrequencyInWindow(rule: FrequencyRule, ctx: EvalContext): Detection[] {
   const windowStart = ctx.now.getTime() - rule.windowMs
-  const windowStartIso = new Date(windowStart).toISOString()
 
-  const counts = new Map<string, number>()
+  const groups = new Map<string, { count: number; latestStartedAt: string }>()
 
   for (const interval of ctx.intervals) {
     if (interval.state !== rule.toState) continue
@@ -21,11 +20,19 @@ export function evaluateFrequencyInWindow(rule: FrequencyRule, ctx: EvalContext)
       group = interval.entityId
     }
 
-    counts.set(group, (counts.get(group) ?? 0) + 1)
+    const current = groups.get(group)
+    const startedAtMs = Date.parse(interval.startedAt)
+    const latestMs = current ? Date.parse(current.latestStartedAt) : startedAtMs
+
+    groups.set(group, {
+      count: (current?.count ?? 0) + 1,
+      latestStartedAt:
+        startedAtMs > latestMs ? interval.startedAt : current?.latestStartedAt ?? interval.startedAt,
+    })
   }
 
   const detections: Detection[] = []
-  for (const [group, count] of counts) {
+  for (const [group, { count, latestStartedAt }] of groups) {
     if (count < rule.count) continue
     detections.push({
       ruleId: rule.id,
@@ -38,7 +45,7 @@ export function evaluateFrequencyInWindow(rule: FrequencyRule, ctx: EvalContext)
         windowMs: rule.windowMs,
         groupBy: rule.groupBy ?? null,
       },
-      dedupKey: `${rule.id}:${group}:${windowStartIso}`,
+      dedupKey: `${rule.id}:${group}:${latestStartedAt}`,
       cooldownKey: `${rule.id}:${group}`,
     })
   }
