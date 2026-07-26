@@ -6,7 +6,7 @@ export type Severity = z.infer<typeof SeveritySchema>
 export const NormalizedEventSchema = z.object({
   entityId: z.string().min(1),
   entityType: z.string().optional(),
-  timestamp: z.string(),
+  timestamp: z.iso.datetime(),
   state: z.string().min(1),
   metadata: z.record(z.string(), z.unknown()).default({}),
 })

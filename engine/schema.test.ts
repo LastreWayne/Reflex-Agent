@@ -16,6 +16,16 @@ describe("NormalizedEventSchema", () => {
       NormalizedEventSchema.parse({ timestamp: "2026-07-25T10:00:00.000Z", state: "Charging" }),
     ).toThrow()
   })
+
+  it("rechaza un timestamp que no es una fecha ISO", () => {
+    expect(() =>
+      NormalizedEventSchema.parse({
+        entityId: "EVC-01",
+        timestamp: "ayer por la tarde",
+        state: "Charging",
+      }),
+    ).toThrow()
+  })
 })
 
 describe("DomainConfigSchema", () => {

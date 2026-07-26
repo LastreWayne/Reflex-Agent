@@ -1,5 +1,16 @@
 import type { Interval, NormalizedEvent } from "./schema.js"
 
+/**
+ * Convierte eventos de cambio de estado en intervalos de duración.
+ *
+ * PRECONDICIÓN: `events` debe venir ordenado cronológicamente ascendente.
+ * `normalize()` lo garantiza; si los eventos llegan de otra fuente, ordenalos
+ * antes. Con eventos desordenados los intervalos salen con `durationMs`
+ * negativo y sin ningún error.
+ *
+ * El último intervalo de cada entidad queda abierto (`isOpen: true`,
+ * `endedAt: null`) y su duración se mide contra `now`.
+ */
 export function toIntervals(events: NormalizedEvent[], now: Date): Interval[] {
   const byEntity = new Map<string, NormalizedEvent[]>()
   for (const event of events) {
