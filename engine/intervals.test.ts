@@ -61,4 +61,10 @@ describe("toIntervals", () => {
   it("devuelve lista vacía sin eventos", () => {
     expect(toIntervals([], NOW)).toEqual([])
   })
+
+  it("ordena los intervalos por startedAt across entidades", () => {
+    // A se inserta primero en el Map pero empieza después que B.
+    const intervals = toIntervals([ev("A", 20, "Charging"), ev("B", 5, "Faulted")], NOW)
+    expect(intervals.map((i) => i.entityId)).toEqual(["B", "A"])
+  })
 })
