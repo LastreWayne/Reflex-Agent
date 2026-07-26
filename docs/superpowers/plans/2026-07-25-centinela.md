@@ -852,7 +852,8 @@ git commit -m "feat(engine): regla absence_of_events"
 - Cuenta **intervalos que comenzaron** en `toState` dentro de `[now - windowMs, now]`. Agrupa por `entityId`, o por el campo de metadata que indique `groupBy`.
 - Cuando hay `groupBy`, el `entityId` de la detección es el valor del grupo (ej. `"norte"`), no una entidad individual — es una detección sobre el grupo.
 - Entradas cuyo `groupBy` no está presente en la metadata se ignoran.
-- `dedupKey` = `` `${rule.id}:${group}:${windowStartIso}` ``; `evidence` = `{ count, threshold, windowMs, groupBy }`.
+- `dedupKey` = `` `${rule.id}:${group}:${latestStartedAt}` ``, donde `latestStartedAt` es el `startedAt` más reciente entre los intervalos contados para ese grupo. **Anclado al dato, no al reloj**: si estuviera anclado a la ventana (derivada de `ctx.now`), la clave cambiaría en cada tick de evaluación, el dedup no suprimiría nada y el `Map` del store crecería un entry por tick. Sus dos reglas hermanas anclan igual: `interval.startedAt` una, `lastSeenAt` la otra.
+- `cooldownKey` = `` `${rule.id}:${group}` ``; `evidence` = `{ count, threshold, windowMs, groupBy }`.
 
 - [ ] **Step 1: Escribir el test que falla**
 
@@ -956,9 +957,11 @@ type FrequencyRule = Extract<Rule, { type: "frequency_in_window" }>
 
 export function evaluateFrequencyInWindow(rule: FrequencyRule, ctx: EvalContext): Detection[] {
   const windowStart = ctx.now.getTime() - rule.windowMs
-  const windowStartIso = new Date(windowStart).toISOString()
 
-  const counts = new Map<string, number>()
+  // Se guarda el startedAt más reciente por grupo, no solo el conteo: es lo que
+  // ancla el dedupKey al dato en vez de al reloj. La comparación es explícita
+  // para no depender de que ctx.intervals venga ordenado.
+  const groups = new Map<string, { count: number; latestStartedAt: string }>()
 
   for (const interval of ctx.intervals) {
     if (interval.state !== rule.toState) continue
@@ -973,11 +976,19 @@ export function evaluateFrequencyInWindow(rule: FrequencyRule, ctx: EvalContext)
       group = interval.entityId
     }
 
-    counts.set(group, (counts.get(group) ?? 0) + 1)
+    const bucket = groups.get(group)
+    if (!bucket) {
+      groups.set(group, { count: 1, latestStartedAt: interval.startedAt })
+    } else {
+      bucket.count += 1
+      if (Date.parse(interval.startedAt) > Date.parse(bucket.latestStartedAt)) {
+        bucket.latestStartedAt = interval.startedAt
+      }
+    }
   }
 
   const detections: Detection[] = []
-  for (const [group, count] of counts) {
+  for (const [group, { count, latestStartedAt }] of groups) {
     if (count < rule.count) continue
     detections.push({
       ruleId: rule.id,
@@ -990,7 +1001,7 @@ export function evaluateFrequencyInWindow(rule: FrequencyRule, ctx: EvalContext)
         windowMs: rule.windowMs,
         groupBy: rule.groupBy ?? null,
       },
-      dedupKey: `${rule.id}:${group}:${windowStartIso}`,
+      dedupKey: `${rule.id}:${group}:${latestStartedAt}`,
       cooldownKey: `${rule.id}:${group}`,
     })
   }
