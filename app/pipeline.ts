@@ -111,6 +111,29 @@ export function toSearch(params: DemoParams): string {
   return `?${q.toString()}`
 }
 
+/**
+ * Qué vista del pipeline se está mirando.
+ *
+ * Vive aparte de `DemoParams` a propósito: `page.tsx` re-corre el motor (y
+ * vuelve a pagarle a Claude) cada vez que cambia el objeto de params, y
+ * cambiar de vista no debe re-correr nada.
+ */
+export type ViewMode = "simple" | "full"
+
+export const DEFAULT_VIEW: ViewMode = "simple"
+
+/** Lee `?view=`. Cualquier valor que no sea `full` cae en la vista simple. */
+export function parseView(search: string): ViewMode {
+  return new URLSearchParams(search).get("view") === "full" ? "full" : DEFAULT_VIEW
+}
+
+/** `toSearch` más la vista, para el `replaceState` de la página. */
+export function toSearchWithView(params: DemoParams, view: ViewMode): string {
+  const q = new URLSearchParams(toSearch(params))
+  if (view !== DEFAULT_VIEW) q.set("view", view)
+  return `?${q.toString()}`
+}
+
 export type SuppressionReason = "dedup" | "cooldown"
 
 export interface ClassifiedDetection {

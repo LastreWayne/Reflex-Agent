@@ -13,8 +13,10 @@ import {
   formatEvidenceValue,
   offlineDecision,
   parseParams,
+  parseView,
   simulatedExecution,
   toSearch,
+  toSearchWithView,
   type DemoParams,
 } from "./pipeline.js"
 
@@ -58,6 +60,31 @@ describe("parseParams", () => {
       at: "2026-03-04T05:06:07.000Z",
     }
     expect(parseParams(toSearch(params))).toEqual(params)
+  })
+})
+
+describe("vista", () => {
+  it("la vista simple es el default", () => {
+    expect(parseView("")).toBe("simple")
+    expect(parseView("?domain=volt&seed=42")).toBe("simple")
+    expect(parseView("?view=cualquiera")).toBe("simple")
+  })
+
+  it("lee ?view=full", () => {
+    expect(parseView("?view=full")).toBe("full")
+    expect(parseView("?domain=volt&view=full&seed=7")).toBe("full")
+  })
+
+  it("toSearchWithView sólo escribe la vista cuando no es el default", () => {
+    expect(toSearchWithView(base, "simple")).toBe(toSearch(base))
+    expect(toSearchWithView(base, "full")).toBe(`${toSearch(base)}&view=full`)
+  })
+
+  it("hace ida y vuelta sin perder los params de la corrida", () => {
+    const params: DemoParams = { ...base, domain: "restaurant", seed: 12, forceIncident: true }
+    const search = toSearchWithView(params, "full")
+    expect(parseParams(search)).toEqual(params)
+    expect(parseView(search)).toBe("full")
   })
 })
 

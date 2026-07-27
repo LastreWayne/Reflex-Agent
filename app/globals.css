@@ -1,148 +1,1999 @@
 /*
- * Estilos mínimos y deliberadamente sosos: sólo lo necesario para que los
- * cinco carriles se lean como cinco carriles y las tarjetas se distingan
- * entre sí. El diseño visual es un paso aparte, posterior a esta tarea.
+ * Centinela — señalética industrial esmaltada.
  *
- * La estructura vive en el marcado (data-lane, data-status, data-severity),
- * no acá: el repintado no debería tener que re-derivar ningún estado.
+ * La dirección vive en DESIGN.md; esta hoja la construye. Chapa pintada,
+ * colores de señal con significado, diagonales de peligro como estructura, y
+ * lámparas que son lámparas — lente, aro y sombra con desplazamiento.
+ *
+ * TODO el color y el ritmo viven en el bloque de tokens de acá abajo.
+ * Cambiar de rumbo es editar esos valores, no reescribir la hoja: el resto del
+ * archivo sólo usa los nombres semánticos (--placa, --tinta, --rojo-lente…).
+ *
+ * El estado vive en el marcado (data-lane, data-status, data-severity,
+ * data-source, data-open, data-lamp, data-view); esta hoja lo lee, nunca lo
+ * re-deriva.
  */
 
-* {
+/* ══════════════════════════════════════════════════════════════════════
+   1 · PALETA — los dos juegos de valores. Editar acá cambia el mundo.
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── DÍA · chapa cálida al sol ────────────────────────────────────── */
+  --l-chapa: #e7dfd2;
+  --l-chapa-honda: #d5c9b6;
+  --l-placa: #f8f4ec;
+  --l-placa-alt: #efe8db;
+  --l-canto: #c7bba8;
+  --l-canto-duro: #93866f;
+  --l-remache: #b2a693;
+  --l-tinta: #221e18;
+  --l-tinta-media: #554c40;
+  --l-tinta-suave: #655a4a;
+  --l-acero-alto: #cdc2af;
+  --l-acero-bajo: #8b8070;
+  --l-brillo: rgba(255, 255, 255, 0.8);
+  --l-sombra: rgba(58, 45, 26, 0.2);
+  --l-sombra-dura: #bcae99;
+  --l-franja-oscura: #241f18;
+  --l-foco: #b8460c;
+
+  --l-rojo: #a52a1b;
+  --l-rojo-lente: #e8412a;
+  --l-rojo-aro: #6d1a0f;
+  --l-rojo-tenue: #f6e2dc;
+  --l-ambar: #7f5303;
+  --l-ambar-lente: #f4ac1b;
+  --l-ambar-aro: #7a5206;
+  --l-ambar-tenue: #f8ecd2;
+  --l-naranja: #9e3c0c;
+  --l-naranja-lente: #ef6f1c;
+  --l-naranja-aro: #7c330e;
+  --l-naranja-tenue: #f9e6d6;
+  --l-claro-lente: #fffdf3;
+  --l-claro-aro: #7c6f59;
+  --l-apagada-lente: #c6bbaa;
+  --l-apagada-aro: #8b7f6e;
+
+  /* ── NOCHE · grafito de sala de control ───────────────────────────── */
+  --d-chapa: #22201b;
+  --d-chapa-honda: #17150f;
+  --d-placa: #2e2b25;
+  --d-placa-alt: #37332c;
+  --d-canto: #474137;
+  --d-canto-duro: #625b4f;
+  --d-remache: #564f44;
+  --d-tinta: #f4ede0;
+  --d-tinta-media: #bfb3a0;
+  --d-tinta-suave: #b0a48d;
+  --d-acero-alto: #6e6555;
+  --d-acero-bajo: #474033;
+  --d-brillo: rgba(255, 255, 255, 0.09);
+  --d-sombra: rgba(0, 0, 0, 0.55);
+  --d-sombra-dura: #14120d;
+  --d-franja-oscura: #14120d;
+  --d-foco: #ff9a52;
+
+  --d-rojo: #ff8770;
+  --d-rojo-lente: #ef4a2f;
+  --d-rojo-aro: #58150a;
+  --d-rojo-tenue: #3a2019;
+  --d-ambar: #f7bd58;
+  --d-ambar-lente: #f6b431;
+  --d-ambar-aro: #6b4905;
+  --d-ambar-tenue: #382d16;
+  --d-naranja: #ff9a5e;
+  --d-naranja-lente: #f57722;
+  --d-naranja-aro: #6c2b0b;
+  --d-naranja-tenue: #3a2417;
+  --d-claro-lente: #fff7e6;
+  --d-claro-aro: #6a6053;
+  --d-apagada-lente: #3c382f;
+  --d-apagada-aro: #575044;
+
+  /* ── PINTURA DE LAS TECLAS ────────────────────────────────────────
+     No cambia entre día y noche a propósito: una tecla esmaltada está
+     pintada del mismo color a las 3 de la tarde y a las 3 de la mañana.
+     Los valores están elegidos para que el blanco encima pase 4.5:1. */
+  --tecla-alta: #c9530f;
+  --tecla-baja: #8b3408;
+  --tecla-borde: #662406;
+  --tecla-peligro-alta: #b5301f;
+  --tecla-peligro-baja: #7c1c12;
+  --tecla-peligro-borde: #5c1109;
+  --tecla-tinta: #fffaf4;
+
+  /* ── RITMO ────────────────────────────────────────────────────────── */
+  --e1: 0.25rem;
+  --e2: 0.5rem;
+  --e3: 0.75rem;
+  --e4: 1rem;
+  --e5: 1.5rem;
+  --e6: 2rem;
+  --e7: 3rem;
+  --e8: 4.5rem;
+
+  --radio: 3px;
+  --radio-placa: 7px;
+  --radio-grande: 12px;
+  /* Cuánto se levanta una placa de la chapa. Es la sombra con cuerpo. */
+  --relieve: 3px;
+
+  --rapido: 130ms;
+  --medio: 280ms;
+  --lento: 520ms;
+  --salida: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── TIPOGRAFÍA ───────────────────────────────────────────────────── */
+  --texto: var(--fuente), "Archivo", system-ui, -apple-system, sans-serif;
+  --ancho-display: 118;
+  --ancho-placa: 108;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
+
+  /* Grano de esmalte: fija, determinista, sin imagen externa. */
+  --grano: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   2 · MAPEO — los nombres semánticos que usa el resto de la hoja.
+        El bloque de noche aparece dos veces (preferencia del sistema y
+        elección explícita) pero los VALORES viven una sola vez, arriba.
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+  --chapa: var(--l-chapa);
+  --chapa-honda: var(--l-chapa-honda);
+  --placa: var(--l-placa);
+  --placa-alt: var(--l-placa-alt);
+  --canto: var(--l-canto);
+  --canto-duro: var(--l-canto-duro);
+  --remache: var(--l-remache);
+  --tinta: var(--l-tinta);
+  --tinta-media: var(--l-tinta-media);
+  --tinta-suave: var(--l-tinta-suave);
+  --acero-alto: var(--l-acero-alto);
+  --acero-bajo: var(--l-acero-bajo);
+  --brillo: var(--l-brillo);
+  --sombra: var(--l-sombra);
+  --sombra-dura: var(--l-sombra-dura);
+  --franja-oscura: var(--l-franja-oscura);
+  --foco: var(--l-foco);
+  --rojo: var(--l-rojo);
+  --rojo-lente: var(--l-rojo-lente);
+  --rojo-aro: var(--l-rojo-aro);
+  --rojo-tenue: var(--l-rojo-tenue);
+  --ambar: var(--l-ambar);
+  --ambar-lente: var(--l-ambar-lente);
+  --ambar-aro: var(--l-ambar-aro);
+  --ambar-tenue: var(--l-ambar-tenue);
+  --naranja: var(--l-naranja);
+  --naranja-lente: var(--l-naranja-lente);
+  --naranja-aro: var(--l-naranja-aro);
+  --naranja-tenue: var(--l-naranja-tenue);
+  --claro-lente: var(--l-claro-lente);
+  --claro-aro: var(--l-claro-aro);
+  --apagada-lente: var(--l-apagada-lente);
+  --apagada-aro: var(--l-apagada-aro);
+  --grano-fuerza: 0.055;
+  --ver-claro: inline;
+  --ver-oscuro: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    color-scheme: dark;
+    --chapa: var(--d-chapa);
+    --chapa-honda: var(--d-chapa-honda);
+    --placa: var(--d-placa);
+    --placa-alt: var(--d-placa-alt);
+    --canto: var(--d-canto);
+    --canto-duro: var(--d-canto-duro);
+    --remache: var(--d-remache);
+    --tinta: var(--d-tinta);
+    --tinta-media: var(--d-tinta-media);
+    --tinta-suave: var(--d-tinta-suave);
+    --acero-alto: var(--d-acero-alto);
+    --acero-bajo: var(--d-acero-bajo);
+    --brillo: var(--d-brillo);
+    --sombra: var(--d-sombra);
+    --sombra-dura: var(--d-sombra-dura);
+    --franja-oscura: var(--d-franja-oscura);
+    --foco: var(--d-foco);
+    --rojo: var(--d-rojo);
+    --rojo-lente: var(--d-rojo-lente);
+    --rojo-aro: var(--d-rojo-aro);
+    --rojo-tenue: var(--d-rojo-tenue);
+    --ambar: var(--d-ambar);
+    --ambar-lente: var(--d-ambar-lente);
+    --ambar-aro: var(--d-ambar-aro);
+    --ambar-tenue: var(--d-ambar-tenue);
+    --naranja: var(--d-naranja);
+    --naranja-lente: var(--d-naranja-lente);
+    --naranja-aro: var(--d-naranja-aro);
+    --naranja-tenue: var(--d-naranja-tenue);
+    --claro-lente: var(--d-claro-lente);
+    --claro-aro: var(--d-claro-aro);
+    --apagada-lente: var(--d-apagada-lente);
+    --apagada-aro: var(--d-apagada-aro);
+    --grano-fuerza: 0.075;
+    --ver-claro: none;
+    --ver-oscuro: inline;
+  }
+}
+
+:root[data-tema="oscuro"] {
+  color-scheme: dark;
+  --chapa: var(--d-chapa);
+  --chapa-honda: var(--d-chapa-honda);
+  --placa: var(--d-placa);
+  --placa-alt: var(--d-placa-alt);
+  --canto: var(--d-canto);
+  --canto-duro: var(--d-canto-duro);
+  --remache: var(--d-remache);
+  --tinta: var(--d-tinta);
+  --tinta-media: var(--d-tinta-media);
+  --tinta-suave: var(--d-tinta-suave);
+  --acero-alto: var(--d-acero-alto);
+  --acero-bajo: var(--d-acero-bajo);
+  --brillo: var(--d-brillo);
+  --sombra: var(--d-sombra);
+  --sombra-dura: var(--d-sombra-dura);
+  --franja-oscura: var(--d-franja-oscura);
+  --foco: var(--d-foco);
+  --rojo: var(--d-rojo);
+  --rojo-lente: var(--d-rojo-lente);
+  --rojo-aro: var(--d-rojo-aro);
+  --rojo-tenue: var(--d-rojo-tenue);
+  --ambar: var(--d-ambar);
+  --ambar-lente: var(--d-ambar-lente);
+  --ambar-aro: var(--d-ambar-aro);
+  --ambar-tenue: var(--d-ambar-tenue);
+  --naranja: var(--d-naranja);
+  --naranja-lente: var(--d-naranja-lente);
+  --naranja-aro: var(--d-naranja-aro);
+  --naranja-tenue: var(--d-naranja-tenue);
+  --claro-lente: var(--d-claro-lente);
+  --claro-aro: var(--d-claro-aro);
+  --apagada-lente: var(--d-apagada-lente);
+  --apagada-aro: var(--d-apagada-aro);
+  --grano-fuerza: 0.075;
+  --ver-claro: none;
+  --ver-oscuro: inline;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   3 · BASE
+   ══════════════════════════════════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
-  padding: 1rem;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.4;
+  background: var(--chapa);
+  color: var(--tinta);
+  font-family: var(--texto);
+  font-size: 15px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  min-height: 100vh;
 }
 
-h1 {
-  font-size: 1.25rem;
-  margin: 0 0 0.25rem;
+/* Grano de la pintura. Es la textura de la chapa, no un fondo decorado. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: var(--grano);
+  opacity: var(--grano-fuerza);
+  pointer-events: none;
+  z-index: 0;
 }
 
-.subtitulo {
-  margin: 0 0 1rem;
+.hoja {
+  position: relative;
+  z-index: 1;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: var(--e5) var(--e5) var(--e7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e6);
+}
+
+.saltar {
+  position: absolute;
+  left: var(--e4);
+  top: var(--e4);
+  z-index: 20;
+  transform: translateY(-200%);
+  background: var(--placa);
+  color: var(--tinta);
+  border: 1px solid var(--canto-duro);
+  border-radius: var(--radio);
+  padding: var(--e2) var(--e3);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.saltar:focus-visible {
+  transform: translateY(0);
+}
+
+.rotulo-seccion {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--naranja-lente);
+  color: #fff;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   4 · MATERIALES — placa esmaltada, remaches, diagonales, lámparas
+   ══════════════════════════════════════════════════════════════════════ */
+
+.cartel-placa,
+.regleta,
+.consola,
+.estado-corrida,
+.carril,
+.mascota,
+.mando {
+  background:
+    linear-gradient(180deg, var(--placa) 0%, var(--placa) 55%, var(--placa-alt) 100%);
+  border: 1px solid var(--canto);
+  border-radius: var(--radio-placa);
+  box-shadow:
+    inset 0 1px 0 var(--brillo),
+    0 var(--relieve) 0 var(--sombra-dura),
+    0 calc(var(--relieve) + 3px) 12px var(--sombra);
+}
+
+/* Remaches: cuatro bulones en las esquinas de las placas grandes. Van en una
+   sola capa de fondo para dejar los pseudo-elementos libres. */
+.remachada {
+  position: relative;
+}
+
+.remachada::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle 4px at 22px 22px, var(--remache) 0 74%, rgba(0, 0, 0, 0.22) 74% 100%, transparent 100%),
+    radial-gradient(circle 4px at calc(100% - 22px) 22px, var(--remache) 0 74%, rgba(0, 0, 0, 0.22) 74% 100%, transparent 100%),
+    radial-gradient(circle 4px at 22px calc(100% - 22px), var(--remache) 0 74%, rgba(0, 0, 0, 0.22) 74% 100%, transparent 100%),
+    radial-gradient(circle 4px at calc(100% - 22px) calc(100% - 22px), var(--remache) 0 74%, rgba(0, 0, 0, 0.22) 74% 100%, transparent 100%);
+}
+
+/* Diagonales de peligro. Marcan zonas, nunca decoran un fondo vacío. */
+.peligro {
+  display: inline-block;
+  padding: 2px var(--e2) 2px calc(var(--e2) + 14px);
+  border: 1px solid var(--ambar-aro);
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(
+        135deg,
+        var(--ambar-lente) 0 8px,
+        var(--franja-oscura) 8px 16px
+      )
+      left center / 12px 100% no-repeat,
+    var(--ambar-tenue);
+  color: var(--ambar);
+  font-weight: 650;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Lámpara: lente + aro + sombra con desplazamiento. Nunca un halo. */
+.lampara {
+  --lente: var(--apagada-lente);
+  --aro: var(--apagada-aro);
+  flex: none;
+  display: inline-block;
+  width: var(--diam, 11px);
+  height: var(--diam, 11px);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 27%, rgba(255, 255, 255, 0.9) 0 11%, rgba(255, 255, 255, 0) 44%),
+    radial-gradient(circle at 50% 46%, var(--lente) 0 52%, var(--aro) 100%);
+  border: 1px solid var(--aro);
+  box-shadow:
+    inset 0 -1px 1px rgba(0, 0, 0, 0.32),
+    0 1px 0 var(--aro),
+    0 2px 3px var(--sombra);
+  vertical-align: -1px;
+  transition:
+    background var(--medio) var(--salida),
+    border-color var(--medio) var(--salida);
+}
+
+.lampara[data-lamp="rojo"] {
+  --lente: var(--rojo-lente);
+  --aro: var(--rojo-aro);
+}
+.lampara[data-lamp="ambar"] {
+  --lente: var(--ambar-lente);
+  --aro: var(--ambar-aro);
+}
+.lampara[data-lamp="naranja"] {
+  --lente: var(--naranja-lente);
+  --aro: var(--naranja-aro);
+}
+.lampara[data-lamp="claro"] {
+  --lente: var(--claro-lente);
+  --aro: var(--claro-aro);
+}
+
+/* Apagada conserva el aro del tono: se sabe de qué lámpara se trata, y que
+   no prendió. Es exactamente lo que pasa con una detección suprimida. */
+.lampara[data-lit="no"] {
+  --lente: var(--apagada-lente);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 1px 0 var(--brillo);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   5 · CARTEL — encabezado en su propio espacio
+   ══════════════════════════════════════════════════════════════════════ */
+
+.cartel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e5);
+  flex-wrap: wrap;
+}
+
+.cartel-placa {
+  position: relative;
+  flex: 1 1 34rem;
+  padding: var(--e5) var(--e6);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--e6);
+}
+
+.cartel-marca,
+.cartel-titulo,
+.cartel-lema,
+.cartel-bajada {
+  grid-column: 1;
+}
+
+/* Clave de señales: qué significa cada color. Ocupa el flanco de la placa. */
+.clave {
+  grid-column: 2;
+  grid-row: 1 / span 4;
+  align-self: end;
+  margin: 0;
+  padding-left: var(--e5);
+  border-left: 1px solid var(--canto);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+}
+
+.clave-fila {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e2);
+  white-space: nowrap;
+}
+
+.clave dt {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tinta-media);
+  min-width: 7.5em;
+}
+
+.clave dd {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--tinta-suave);
+}
+
+/* El marco pintado del cartel esmaltado: una línea de señal por dentro del
+   canto de la chapa. Es la firma de la señalética, no un borde de tarjeta. */
+.cartel-placa::after {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border: 2px solid var(--naranja-lente);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.cartel-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  margin: 0 0 var(--e3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--tinta-media);
+}
+
+.cartel-piloto {
+  --diam: 13px;
+}
+
+.cartel-titulo {
+  margin: 0;
+  font-size: clamp(2.75rem, 8.2vw, 5rem);
+  line-height: 0.9;
+  font-weight: 700;
+  font-stretch: expanded;
+  font-variation-settings: "wdth" var(--ancho-display);
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  color: var(--tinta);
+}
+
+.cartel-lema {
+  margin: var(--e3) 0 0;
+  font-size: clamp(1rem, 2.2vw, 1.375rem);
+  font-weight: 500;
+  font-stretch: semi-expanded;
+  font-variation-settings: "wdth" var(--ancho-placa);
+  color: var(--naranja);
+}
+
+.cartel-bajada {
+  margin: var(--e3) 0 0;
+  max-width: 58ch;
+  color: var(--tinta-media);
+}
+
+/* ── Interruptor de modo ─────────────────────────────────────────────── */
+
+.perilla {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e2);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--tinta-media);
+  background: var(--placa);
+  border: 1px solid var(--canto);
+  border-radius: 999px;
+  padding: var(--e1) var(--e3) var(--e1) var(--e1);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 var(--brillo),
+    0 2px 0 var(--sombra-dura);
+  transition: border-color var(--rapido) linear;
+}
+
+.perilla:hover {
+  border-color: var(--canto-duro);
+  color: var(--tinta);
+}
+
+.perilla-cuerpo {
+  display: block;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--chapa-honda);
+  border: 1px solid var(--canto-duro);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.perilla-tecla {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, var(--brillo) 0 30%, transparent 60%),
+    var(--ambar-lente);
+  border: 1px solid var(--ambar-aro);
+  transition: transform var(--medio) var(--salida);
+}
+
+:root[data-tema="oscuro"] .perilla-tecla {
+  transform: translateX(18px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) .perilla-tecla {
+    transform: translateX(18px);
+  }
+}
+
+.solo-claro {
+  display: var(--ver-claro);
+}
+.solo-oscuro {
+  display: var(--ver-oscuro);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   6 · REGLETA — los cinco caminos, una placa dividida en bahías
+   ══════════════════════════════════════════════════════════════════════ */
+
+.regleta {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.bahia {
+  position: relative;
+  min-width: 0;
+  display: flex;
+}
+
+/* La canaleta entre bahías: un rebaje troquelado, no un borde de 1px. */
+.bahia + .bahia::before {
+  content: "";
+  position: absolute;
+  inset: var(--e3) auto var(--e3) 0;
+  width: 2px;
+  background: var(--chapa-honda);
+  border-right: 1px solid var(--brillo);
+}
+
+.bahia-boton {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "orden lampara"
+    "titulo titulo"
+    "texto texto";
+  align-items: center;
+  gap: var(--e1) var(--e2);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: var(--e4) var(--e4) var(--e5);
+  cursor: pointer;
+  transition: background var(--rapido) linear;
+}
+
+.bahia-boton:hover {
+  background: var(--placa-alt);
+}
+
+.bahia-orden {
+  grid-area: orden;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variation-settings: "wdth" var(--ancho-display);
+  line-height: 1;
+  color: var(--tinta-suave);
+  transition: color var(--medio) var(--salida);
+}
+
+.bahia-lampara {
+  grid-area: lampara;
+  justify-self: end;
+  --diam: 13px;
+}
+
+.bahia-titulo {
+  grid-area: titulo;
+  font-size: 1.0625rem;
+  font-weight: 650;
+  font-variation-settings: "wdth" var(--ancho-placa);
+  letter-spacing: -0.005em;
+  color: var(--tinta);
+}
+
+.bahia-texto {
+  grid-area: texto;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--tinta-media);
+}
+
+/* Bahía encendida: el número se pinta con el color de la marca. */
+.bahia[data-encendida="si"] .bahia-orden {
+  color: var(--naranja);
+}
+
+/* Bahía que el visor está mostrando: la placa se hunde en la chapa. */
+.bahia[data-mirando="si"] {
+  background: var(--placa-alt);
+  box-shadow: inset 0 2px 4px var(--sombra);
+}
+
+.bahia[data-mirando="si"] .bahia-boton {
+  box-shadow: inset 0 -4px 0 var(--naranja-lente);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   7 · BANDA — la pestaña de controles y la lectura de la corrida
+   ══════════════════════════════════════════════════════════════════════ */
+
+.banda {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+  margin-top: calc(var(--e6) * -0.5);
+}
+
+.consola {
+  overflow: hidden;
+}
+
+.consola-lengueta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: var(--e3) var(--e4);
+  cursor: pointer;
+  transition: background var(--rapido) linear;
+}
+
+.consola-lengueta:hover {
+  background: var(--placa-alt);
+}
+
+/* El tirador de la pestaña: tres estrías, como una manija de chapa. */
+.consola-tirador {
+  flex: none;
+  width: 14px;
+  height: 20px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--canto-duro) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.consola-titulo {
+  font-weight: 650;
+  font-variation-settings: "wdth" var(--ancho-placa);
+  letter-spacing: 0.01em;
+}
+
+.consola-resumen {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: var(--tinta-media);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.consola-signo {
+  flex: none;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--naranja);
+  border: 1px solid var(--canto);
+  border-radius: 2px;
+  padding: 2px var(--e2);
+  background: var(--placa);
+}
+
+/* La pestaña se agranda: la caja pasa de 0fr a 1fr. */
+.consola-caja {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--medio) var(--salida);
+}
+
+.consola[data-abierta="si"] .consola-caja {
+  grid-template-rows: 1fr;
+}
+
+.consola-panel {
+  overflow: hidden;
+  min-height: 0;
 }
 
 .controles {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0;
-  border-top: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  margin-bottom: 0.75rem;
+  align-items: stretch;
+  gap: var(--e4) var(--e5);
+  padding: var(--e4);
+  border-top: 1px solid var(--canto);
+  background: var(--placa-alt);
 }
 
-.controles fieldset {
+.grupo {
   display: flex;
-  align-items: center;
-  gap: 0.375rem;
+  flex-direction: column;
+  gap: var(--e2);
   border: 0;
   padding: 0;
   margin: 0;
-}
-
-.controles legend {
-  float: left;
-  padding-right: 0.375rem;
-}
-
-.controles input[type="number"] {
-  width: 6ch;
-}
-
-button[aria-pressed="true"] {
-  font-weight: 700;
-  text-decoration: underline;
-}
-
-.estado-corrida {
-  margin: 0 0 0.75rem;
-}
-
-.carriles {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.5rem;
-  align-items: start;
-}
-
-.carril {
-  border: 1px solid currentColor;
   min-width: 0;
 }
 
-.carril > header {
-  padding: 0.375rem 0.5rem;
-  border-bottom: 1px solid currentColor;
+.grupo legend {
+  padding: 0;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+}
+
+.grupo-cuerpo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e2);
+}
+
+.tecla {
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--canto-duro);
+  border-radius: var(--radio);
+  background: linear-gradient(180deg, var(--placa) 0%, var(--placa-alt) 100%);
+  color: var(--tinta);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 var(--brillo),
+    0 2px 0 var(--sombra-dura);
+  transition:
+    transform var(--rapido) var(--salida),
+    box-shadow var(--rapido) var(--salida),
+    background var(--rapido) linear;
+}
+
+.tecla:hover {
+  background: var(--placa);
+  border-color: var(--tinta-suave);
+}
+
+.tecla:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 3px var(--sombra);
+}
+
+.tecla[aria-pressed="true"] {
+  background: linear-gradient(180deg, var(--tecla-alta) 0%, var(--tecla-baja) 100%);
+  border-color: var(--tecla-borde);
+  color: var(--tecla-tinta);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 2px 0 var(--tecla-borde);
+}
+
+.tecla[aria-pressed="true"]:hover {
+  background: linear-gradient(180deg, var(--tecla-alta) 0%, var(--tecla-baja) 100%);
+  border-color: var(--tecla-borde);
+  filter: brightness(1.08);
+}
+
+.tecla-peligro[aria-pressed="true"] {
+  background: linear-gradient(180deg, var(--tecla-peligro-alta) 0%, var(--tecla-peligro-baja) 100%);
+  border-color: var(--tecla-peligro-borde);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 2px 0 var(--tecla-peligro-borde);
+}
+
+.grupo input[type="number"] {
+  width: 8ch;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: var(--e2) var(--e2);
+  border: 1px solid var(--canto-duro);
+  border-radius: var(--radio);
+  background: var(--chapa-honda);
+  color: var(--tinta);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.25);
+}
+
+/* Palanca del modo offline: un interruptor de chapa, no un checkbox. */
+.palanca {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e2);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.palanca input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.palanca-cuerpo {
+  width: 44px;
+  height: 24px;
+  border-radius: 3px;
+  background: var(--chapa-honda);
+  border: 1px solid var(--canto-duro);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+
+.palanca-tecla {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--placa) 0%, var(--canto) 100%);
+  border: 1px solid var(--canto-duro);
+  transition: transform var(--medio) var(--salida);
+}
+
+.palanca input:checked + .palanca-cuerpo .palanca-tecla {
+  transform: translateX(20px);
+  background: linear-gradient(180deg, var(--ambar-lente) 0%, var(--ambar) 100%);
+  border-color: var(--ambar-aro);
+}
+
+.palanca input:focus-visible + .palanca-cuerpo {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+}
+
+.palanca-texto {
+  color: var(--tinta-media);
+}
+
+/* ── Lectura de la corrida ───────────────────────────────────────────── */
+
+.estado-corrida {
+  margin: 0;
+  padding: var(--e3) var(--e4);
+  font-size: 0.875rem;
+  color: var(--tinta-media);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em;
+  line-height: 1.7;
+}
+
+.estado-corrida strong {
+  color: var(--tinta);
+  font-weight: 650;
+  font-variation-settings: "wdth" var(--ancho-placa);
+}
+
+.estado-corrida .punto {
+  color: var(--canto-duro);
+}
+
+.estado-corrida time,
+.cifra {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.estado-corrida [data-modo="off"] {
+  color: var(--naranja);
+  font-weight: 600;
+}
+
+.estado-corrida [data-modo="full"],
+.estado-corrida [data-modo="decide"] {
+  color: var(--tinta-suave);
+}
+
+.estado-corrida [data-error="motor"] {
+  color: var(--rojo);
+}
+
+/* La fase se lee en el borde superior: un testigo que avanza. */
+.estado-corrida {
+  position: relative;
+  overflow: hidden;
+}
+
+.estado-corrida::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--canto);
+}
+
+.estado-corrida[data-fase="corriendo"]::before {
+  background: var(--ambar-lente);
+}
+
+.estado-corrida[data-fase="listo"]::before {
+  background: var(--naranja-lente);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   8 · ESCENA — mando, visor y carriles
+   ══════════════════════════════════════════════════════════════════════ */
+
+.escena {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e4);
+  scroll-margin-top: var(--e4);
+  /* El carril entra deslizándose 22px: sin esto, durante esos 280 ms
+     aparece una barra de scroll horizontal. `clip` no crea contenedor de
+     scroll, y el margen deja pasar la sombra de la placa. */
+  overflow-x: clip;
+  overflow-clip-margin: 20px;
+}
+
+.mando {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--e4);
+  flex-wrap: wrap;
+  padding: var(--e3);
+}
+
+.visor-mando {
+  flex: 1 1 20rem;
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+}
+
+.visor-mando[data-oculto="si"] {
+  display: none;
+}
+
+.paso {
+  flex: none;
+  width: 56px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  font-size: 1.625rem;
+  font-weight: 600;
+  line-height: 1;
+  font-family: var(--texto);
+  color: var(--tecla-tinta);
+  background: linear-gradient(180deg, var(--tecla-alta) 0%, var(--tecla-baja) 100%);
+  border: 1px solid var(--tecla-borde);
+  border-radius: var(--radio);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 3px 0 var(--tecla-borde);
+  transition:
+    transform var(--rapido) var(--salida),
+    box-shadow var(--rapido) var(--salida),
+    filter var(--rapido) linear;
+}
+
+.paso:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.paso:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.paso:disabled {
+  cursor: not-allowed;
+  background: var(--chapa-honda);
+  border-color: var(--canto-duro);
+  color: var(--tinta-suave);
+  box-shadow: inset 0 2px 3px var(--sombra);
+}
+
+.visor-posicion {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.visor-etapa {
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-variation-settings: "wdth" var(--ancho-placa);
+  letter-spacing: 0.01em;
+}
+
+.visor-cuenta {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+}
+
+.selector-vista {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding-left: var(--e3);
+  border-left: 1px solid var(--canto);
+}
+
+.selector-rotulo {
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+  margin-right: var(--e1);
+}
+
+/* En vista completa no hay flechas: la barra se encoge y se va a la derecha
+   en vez de quedar como una placa vacía. */
+.mando:has(.visor-mando[data-oculto="si"]) {
+  align-self: flex-end;
+}
+
+.mando:has(.visor-mando[data-oculto="si"]) .selector-vista {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.selector-vista .tecla {
+  white-space: nowrap;
+}
+
+/* ── Los carriles ─────────────────────────────────────────────────────── */
+
+.carriles {
+  display: grid;
+  gap: var(--e3);
+  align-items: start;
+}
+
+.carriles[data-view="full"] {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.carriles[data-view="simple"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.carril {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.carril[data-visible="no"] {
+  display: none;
+}
+
+.carril-cabeza {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e3) var(--e4);
+  background: var(--placa-alt);
+  border-bottom: 1px solid var(--canto);
+}
+
+.carril-orden {
+  font-size: 1.375rem;
+  font-weight: 700;
+  font-variation-settings: "wdth" var(--ancho-display);
+  line-height: 1;
+  color: var(--tinta-suave);
+}
+
+.carril-rotulo {
+  min-width: 0;
 }
 
 .carril h2 {
-  font-size: 0.875rem;
   margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  font-variation-settings: "wdth" var(--ancho-placa);
+  letter-spacing: 0.005em;
+  color: var(--tinta);
 }
 
 .carril .conteo {
-  font-variant-numeric: tabular-nums;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--tinta-media);
+}
+
+.carril-piloto {
+  --diam: 12px;
+}
+
+/* Carril encendido: el número se pinta y la cabeza se calienta. */
+.carril[data-active="si"] .carril-orden {
+  color: var(--naranja);
 }
 
 .carril > ol {
   list-style: none;
   margin: 0;
-  padding: 0.375rem;
-  max-height: 60vh;
+  padding: var(--e3);
+  display: grid;
+  gap: var(--e2);
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
+  overscroll-behavior: contain;
 }
 
+.carriles[data-view="full"] .carril > ol {
+  max-height: 58vh;
+}
+
+/* ── Vista simple: un solo carril, mucho más grande ───────────────────── */
+
+.carriles[data-view="simple"] .carril-cabeza {
+  padding: var(--e4) var(--e5);
+  gap: var(--e4);
+}
+
+.carriles[data-view="simple"] .carril-orden {
+  font-size: 2.75rem;
+}
+
+.carriles[data-view="simple"] .carril h2 {
+  font-size: clamp(1.5rem, 3.4vw, 2.125rem);
+  font-stretch: expanded;
+  font-variation-settings: "wdth" var(--ancho-display);
+  letter-spacing: -0.015em;
+  line-height: 1.05;
+}
+
+.carriles[data-view="simple"] .carril .conteo {
+  font-size: 0.9375rem;
+}
+
+.carriles[data-view="simple"] .carril-piloto {
+  --diam: 18px;
+}
+
+.carriles[data-view="simple"] .carril > ol {
+  padding: var(--e4) var(--e5) var(--e5);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--e3);
+  max-height: min(62vh, 560px);
+}
+
+.carriles[data-view="simple"] .vacio {
+  padding: var(--e6) var(--e5);
+  font-size: 1rem;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   9 · TARJETAS — chapitas atornilladas al carril
+   ══════════════════════════════════════════════════════════════════════ */
+
 .tarjeta {
-  border: 1px solid currentColor;
-  padding: 0.375rem 0.5rem;
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--canto);
+  border-radius: var(--radio);
+  padding: var(--e3);
+  background: var(--placa);
+  box-shadow:
+    inset 0 1px 0 var(--brillo),
+    0 1px 0 var(--sombra-dura);
   overflow-wrap: anywhere;
 }
 
-.tarjeta dl {
-  margin: 0.25rem 0 0;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0 0.5rem;
-}
-
-.tarjeta dt,
-.tarjeta dd {
+.tarjeta-cabeza {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e1) var(--e2);
   margin: 0;
 }
 
 .tarjeta .titulo {
-  font-weight: 700;
+  font-weight: 650;
+  font-variation-settings: "wdth" var(--ancho-placa);
+  letter-spacing: 0.01em;
+  color: var(--tinta);
+}
+
+.tarjeta-hora {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  color: var(--tinta-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+.tarjeta-texto {
+  margin: var(--e2) 0 0;
+  font-size: 0.875rem;
+  color: var(--tinta-media);
+}
+
+.tarjeta dl {
+  margin: var(--e2) 0 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1px var(--e3);
+  font-size: 0.8125rem;
+}
+
+.tarjeta dt {
+  color: var(--tinta-suave);
+}
+
+.tarjeta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--tinta);
+}
+
+.tarjeta .dd-texto {
+  letter-spacing: 0;
+  color: var(--tinta-media);
 }
 
 .tarjeta .etiqueta {
   display: inline-block;
-  border: 1px solid currentColor;
-  padding: 0 0.25rem;
-  margin-right: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--canto);
+  border-radius: 2px;
+  padding: 1px var(--e1);
+  background: var(--placa-alt);
+  color: var(--tinta-media);
+}
+
+.tarjeta .sello {
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ambar);
+  border: 1px dashed var(--ambar-aro);
+  border-radius: 2px;
+  padding: 1px var(--e1);
+}
+
+.tarjeta .etiqueta[data-severity="high"] {
+  color: var(--rojo);
+  border-color: var(--rojo-aro);
+  background: var(--rojo-tenue);
+}
+
+.tarjeta .etiqueta[data-severity="medium"] {
+  color: var(--ambar);
+  border-color: var(--ambar-aro);
+  background: var(--ambar-tenue);
+}
+
+/* Silenciadas: la chapita se apaga, no se tacha. */
+.tarjeta[data-status="suprimida"],
+.tarjeta[data-status="fuera-de-cupo"] {
+  background: var(--placa-alt);
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.tarjeta[data-status="suprimida"] .titulo,
+.tarjeta[data-status="fuera-de-cupo"] .titulo {
+  color: var(--tinta-media);
+}
+
+/* Intervalo abierto: la chapita queda sin cerrar por abajo. */
+.tarjeta[data-open="si"] {
+  border-bottom-style: dashed;
+}
+
+/* Pendiente: la chapita todavía no está atornillada. */
+.tarjeta[data-status="pendiente"] {
+  border-style: dashed;
+  background: var(--placa-alt);
+}
+
+/* Zona de falla: la diagonal de peligro marca el borde superior. */
+.tarjeta[data-status="error"],
+.tarjeta[data-status="fallo"] {
+  border-color: var(--rojo-aro);
+  background: var(--rojo-tenue);
+  padding-top: calc(var(--e3) + 8px);
+}
+
+.tarjeta[data-status="error"]::before,
+.tarjeta[data-status="fallo"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 8px;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--rojo-lente) 0 8px,
+    var(--franja-oscura) 8px 16px
+  );
+}
+
+.tarjeta .aviso {
+  color: var(--rojo);
+  font-weight: 500;
+}
+
+/* De dónde vino: lo real se marca con el naranja de la marca; lo pregrabado o
+   simulado queda punteado, como un sello provisorio. */
+.tarjeta[data-source="claude"] .etiqueta[data-tag="fuente"],
+.tarjeta[data-source="real"] .etiqueta[data-tag="fuente"] {
+  color: var(--naranja);
+  border-color: var(--naranja-aro);
+  background: var(--naranja-tenue);
+}
+
+.tarjeta[data-source="pregrabada"] .etiqueta[data-tag="fuente"],
+.tarjeta[data-source="simulada"] .etiqueta[data-tag="fuente"] {
+  border-style: dashed;
+  color: var(--tinta-suave);
 }
 
 .vacio {
-  padding: 0.5rem;
   margin: 0;
+  padding: var(--e5) var(--e4);
+  color: var(--tinta-suave);
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--placa) 0 10px,
+    var(--placa-alt) 10px 20px
+  );
+  border-top: 1px solid var(--canto);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   10 · MASCOTA — el Reflex Agent bajo el carril único
+   ══════════════════════════════════════════════════════════════════════ */
+
+.mascota {
+  --lx: -0.32;
+  --ly: -0.5;
+  margin: 0;
+  padding: var(--e5) var(--e4) var(--e4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e3);
+  align-self: center;
+  width: min(100%, 30rem);
+}
+
+.mascota-svg {
+  width: min(100%, 260px);
+  height: auto;
+  overflow: visible;
+}
+
+/* — chapa y chasis — */
+.m-esmalte-alto {
+  stop-color: var(--naranja-lente);
+}
+.m-esmalte-bajo {
+  stop-color: var(--naranja);
+}
+.m-chasis-alto {
+  stop-color: var(--acero-alto);
+}
+.m-chasis-bajo {
+  stop-color: var(--acero-bajo);
+}
+.m-lente-centro {
+  stop-color: var(--claro-lente);
+}
+.m-lente-medio {
+  stop-color: var(--ambar-lente);
+}
+.m-lente-borde {
+  stop-color: var(--ambar-aro);
+}
+
+.m-canto {
+  stroke: var(--naranja-aro);
+  stroke-width: 1;
+}
+
+.m-cabeza .m-canto {
+  stroke: var(--acero-bajo);
+}
+
+.m-parpados rect {
+  fill: var(--acero-bajo);
+}
+
+.m-patas rect,
+.m-brazos rect,
+.m-cuello,
+.m-oreja,
+.m-antena-vara {
+  fill: var(--acero-bajo);
+}
+
+.m-remaches circle {
+  fill: var(--naranja-aro);
+  opacity: 0.55;
+}
+
+.m-ventana {
+  fill: var(--franja-oscura);
+  stroke: var(--naranja-aro);
+  stroke-width: 1;
+}
+
+.m-numero {
+  fill: var(--ambar-lente);
+  font-family: var(--texto);
+  font-size: 26px;
+  font-weight: 700;
+  font-variation-settings: "wdth" var(--ancho-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+.m-franja {
+  fill: var(--franja-oscura);
+  opacity: 0.35;
+}
+
+.m-visor {
+  fill: var(--franja-oscura);
+  opacity: 0.9;
+}
+
+.m-antena-sombra {
+  fill: var(--sombra-dura);
+}
+
+.m-antena-aro,
+.m-ojo-aro {
+  stroke: var(--claro-aro);
+  stroke-width: 1.5;
+}
+
+.m-pupilas circle {
+  fill: var(--franja-oscura);
+  transform: translate(calc(var(--lx) * 3.6px), calc(var(--ly) * 2.6px));
+  transition: transform 40ms linear;
+}
+
+.m-parpados rect {
+  transform: scaleY(0);
+  transform-origin: center;
+  transform-box: fill-box;
+  transition: transform var(--medio) var(--salida);
+}
+
+.mascota[data-mascota="inicio"] .m-parpados rect {
+  transform: scaleY(1);
+}
+
+/* La cabeza se orienta a la luz. */
+.m-cabeza {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  transform: rotate(calc(var(--lx) * 3.2deg));
+  transition: transform 90ms linear;
+}
+
+/* El barrido de la lámpara de taller sobre la chapa pintada: un brillo
+   especular que se corre, y la sombra propia que va al lado opuesto. */
+.m-barrido-centro {
+  stop-color: #fff;
+  stop-opacity: 0.3;
+}
+.m-barrido-medio {
+  stop-color: #fff;
+  stop-opacity: 0.11;
+}
+.m-barrido-borde {
+  stop-color: #fff;
+  stop-opacity: 0;
+}
+.m-penumbra-centro {
+  stop-color: var(--franja-oscura);
+  stop-opacity: 0.4;
+}
+.m-penumbra-borde {
+  stop-color: var(--franja-oscura);
+  stop-opacity: 0;
+}
+
+.m-brillo {
+  transform: translate(calc(var(--lx) * 52px), calc(var(--ly) * 30px));
+  transition: transform 90ms linear;
+}
+
+.m-sombra-propia {
+  transform: translate(calc(var(--lx) * -58px), calc(var(--ly) * -32px));
+  transition: transform 90ms linear;
+}
+
+.m-sombra-piso {
+  fill: var(--sombra-dura);
+  opacity: 0.7;
+  transform: translate(calc(var(--lx) * -26px), 0) scaleX(calc(1 + var(--lx) * 0.12));
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 90ms linear;
+}
+
+/* La antena es una lámpara de verdad: cambia de tono con la fase. */
+.mascota[data-mascota="inicio"] .m-lente-medio {
+  stop-color: var(--apagada-lente);
+}
+.mascota[data-mascota="inicio"] .m-lente-borde {
+  stop-color: var(--apagada-aro);
+}
+.mascota[data-mascota="listo"] .m-lente-medio {
+  stop-color: var(--naranja-lente);
+}
+.mascota[data-mascota="listo"] .m-lente-borde {
+  stop-color: var(--naranja-aro);
+}
+.mascota[data-mascota="error"] .m-lente-medio {
+  stop-color: var(--rojo-lente);
+}
+.mascota[data-mascota="error"] .m-lente-borde {
+  stop-color: var(--rojo-aro);
+}
+
+.mascota-pie {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.mascota-nombre {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--tinta-media);
+}
+
+.mascota-detalle {
+  font-size: 0.8125rem;
+  color: var(--tinta-suave);
+}
+
+.mascota[data-mascota="error"] .mascota-detalle {
+  color: var(--rojo);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   11 · PIE
+   ══════════════════════════════════════════════════════════════════════ */
+
+.pie {
+  border-top: 1px solid var(--canto);
+  padding-top: var(--e4);
 }
 
 .leyenda {
-  margin-top: 1rem;
+  margin: 0;
+  max-width: 82ch;
+  font-size: 0.8125rem;
+  color: var(--tinta-media);
 }
 
-@media (max-width: 1100px) {
-  .carriles {
+.leyenda code {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  background: var(--chapa-honda);
+  border: 1px solid var(--canto);
+  border-radius: 2px;
+  padding: 0 4px;
+  color: var(--tinta);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   12 · MOVIMIENTO — un solo momento autoral: el pipeline avanzando
+   ══════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* El carril entra por el lado hacia el que se movió el visor. */
+  .carriles[data-view="simple"] .carril[data-visible="si"] {
+    animation: entra-adelante var(--medio) var(--salida) both;
+  }
+
+  .carriles[data-view="simple"][data-sentido="atras"] .carril[data-visible="si"] {
+    animation-name: entra-atras;
+  }
+
+  /* Las chapitas se atornillan de a una, escalonadas. */
+  .carril[data-active="si"] .tarjeta {
+    animation: aparece var(--medio) var(--salida) backwards;
+    animation-delay: calc(var(--i, 0) * 16ms);
+  }
+
+  /* La lámpara de una decisión en vuelo late. Es carga, no adorno. */
+  .lampara[data-beat="si"] {
+    animation: latido 1.15s ease-in-out infinite;
+  }
+}
+
+@keyframes entra-adelante {
+  from {
+    opacity: 0;
+    transform: translateX(22px);
+  }
+}
+
+@keyframes entra-atras {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+}
+
+@keyframes aparece {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+}
+
+@keyframes latido {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   13 · ANCHOS
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* La clave de señales se apila cuando la placa deja de tener flanco. */
+@media (max-width: 1120px) {
+  .cartel-placa {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .clave {
+    grid-column: 1;
+    grid-row: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--e2) var(--e4);
+    margin-top: var(--e4);
+    padding: var(--e3) 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--canto);
+  }
+
+  .clave dt {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 1280px) {
+  .carriles[data-view="full"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .regleta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .bahia:nth-child(3n + 1)::before {
+    display: none;
+  }
+
+  .bahia:nth-child(n + 4) {
+    border-top: 2px solid var(--chapa-honda);
+  }
+}
+
+@media (max-width: 900px) {
+  .hoja {
+    padding: var(--e5) var(--e4) var(--e6);
+    gap: var(--e6);
+  }
+
+  .cartel-placa {
+    padding: var(--e4) var(--e5);
+  }
+
+  .carriles[data-view="full"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .banda {
+    margin-top: calc(var(--e5) * -0.4);
+  }
+
+  .mando {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* En columna, `flex-basis` pasa a ser altura: sin esto la barra de mando
+     se estira a 20rem de alto. */
+  .visor-mando {
+    flex: none;
+  }
+
+  .selector-vista {
+    justify-content: center;
+    border-left: 0;
+    padding-left: 0;
+    padding-top: var(--e3);
+    border-top: 1px solid var(--canto);
+  }
+
+  .mando:has(.visor-mando[data-oculto="si"]) .selector-vista {
+    border-top: 0;
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 14px;
+  }
+
+  .hoja {
+    padding: var(--e4) var(--e3) var(--e6);
+    gap: var(--e5);
+  }
+
+  .cartel {
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: var(--e3);
+  }
+
+  .cartel-placa {
+    width: 100%;
+    padding: var(--e4);
+  }
+
+  .cartel-placa::after {
+    inset: 6px;
+  }
+
+  /* Archivo Expanded a escala de señal no entra en un teléfono: en pantallas
+     chicas la placa usa el ancho normal y un cuerpo que sí entra. */
+  /* Archivo Expanded a escala de señal necesita ancho: en un teléfono el
+     cuerpo se ata al viewport para que CENTINELA entre entera. */
+  .cartel-titulo {
+    font-size: min(11.8vw, 3rem);
+  }
+
+  .regleta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bahia::before {
+    display: none;
+  }
+
+  .bahia + .bahia {
+    border-top: 2px solid var(--chapa-honda);
+  }
+
+  .bahia-boton {
+    padding: var(--e3) var(--e4);
+  }
+
+  .carriles[data-view="full"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .carriles[data-view="full"] .carril > ol {
+    max-height: 42vh;
+  }
+
+  .carriles[data-view="simple"] .carril-cabeza {
+    padding-left: var(--e4);
+    padding-right: var(--e4);
+  }
+
+  .carriles[data-view="simple"] .carril > ol {
+    padding: var(--e3) var(--e4) var(--e4);
+    max-height: 56vh;
+  }
+
+  .carriles[data-view="simple"] .carril-orden {
+    font-size: 2rem;
+  }
+
+  .paso {
+    width: 48px;
+    height: 44px;
+  }
+
+  .consola-resumen {
+    display: none;
+  }
+
+  .mascota-svg {
+    width: min(100%, 200px);
   }
 }
