@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Detection } from "../../engine/schema.js"
 import { POST as decide } from "./decide/route.js"
 import { POST as execute } from "./execute/route.js"
+import { execute as executeAction } from "../../adapters/executors/index.js"
 
 const create = vi.fn()
 
@@ -13,6 +14,14 @@ vi.mock("@anthropic-ai/sdk", () => ({
     beta = { messages: { create } }
   },
 }))
+
+// Se envuelve el `execute` real con un spy (en vez de reemplazarlo) para
+// poder afirmar "nunca se llamó" en el test del body sobredimensionado sin
+// tocar el comportamiento que ya verifican los tests de ejecución de abajo.
+vi.mock("../../adapters/executors/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../adapters/executors/index.js")>()
+  return { ...actual, execute: vi.fn(actual.execute) }
+})
 
 const detection: Detection = {
   ruleId: "faulted-stuck",
@@ -37,6 +46,7 @@ function post(body: unknown): Request {
 afterEach(() => {
   vi.unstubAllEnvs()
   create.mockReset()
+  vi.mocked(executeAction).mockClear()
 })
 
 describe("POST /api/execute", () => {
@@ -58,6 +68,24 @@ describe("POST /api/execute", () => {
     )
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: "acción desconocida" })
+  })
+
+  it("rechaza un body que excede las cotas de tamaño y nunca llega al executor", async () => {
+    // decision.message viaja sin cotas hasta el executor real (Discord, ntfy,
+    // github issue). Debe rechazarse en el safeParse de app/domains.ts —
+    // antes de resolver CONFIGS o llamar a execute() — con el mismo 400
+    // genérico que un body inválido, sin devolver el valor ofensivo.
+    const response = await execute(
+      post({
+        domain: "volt",
+        actionId: "ignore",
+        decision: { ...decision, message: "x".repeat(2001) },
+        detection,
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: "request inválido" })
+    expect(executeAction).not.toHaveBeenCalled()
   })
 
   it("ejecuta una acción resuelta desde el config del servidor", async () => {
@@ -119,6 +147,23 @@ describe("POST /api/decide", () => {
   it("rechaza un dominio desconocido", async () => {
     const response = await decide(post({ domain: "marte", detection }))
     expect(response.status).toBe(400)
+  })
+
+  it("rechaza un body que excede las cotas de tamaño y nunca llega al decisor", async () => {
+    // detection.evidence se interpola tal cual en el prompt de Claude
+    // (adapters/decider/prompt.ts:57-63): sin cota, un visitante anónimo
+    // puede quemar crédito de la cuenta de Anthropic del dueño. Debe
+    // rechazarse en el safeParse, con el mismo 400 genérico que un body
+    // inválido, antes de construir el decider o llamar al SDK.
+    const response = await decide(
+      post({
+        domain: "volt",
+        detection: { ...detection, evidence: { big: "x".repeat(6000) } },
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: "request inválido" })
+    expect(create).not.toHaveBeenCalled()
   })
 
   it("no acepta un config mandado por el navegador — resuelve el suyo", async () => {
