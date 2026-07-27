@@ -123,3 +123,13 @@ export interface EvalContext {
   events: NormalizedEvent[]
   now: Date
 }
+
+/**
+ * Lo que el motor necesita recordar entre corridas para no repetir alertas.
+ * La interfaz vive acá y no en el adapter: el motor declara lo que necesita,
+ * el adapter lo implementa. Al revés, /engine dependería de /adapters.
+ */
+export interface StateStore {
+  lastFiredAt(key: string): Date | null
+  markFired(key: string, at: Date): void
+}

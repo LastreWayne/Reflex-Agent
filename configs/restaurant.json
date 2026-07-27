@@ -1,0 +1,18 @@
+{
+  "domain": "restaurant",
+  "displayName": "Mesas — Reservas de restaurante",
+  "entity": { "singular": "mesa", "plural": "mesas" },
+  "states": ["Libre", "Reservada", "Ocupada"],
+  "context": "Restaurante de 12 mesas con reservas. El dueño atiende el salón y no mira el sistema. Una mesa reservada que no llega es plata que se pierde en hora pico; una mesa ocupada mucho más de lo normal puede necesitar atención.",
+  "rules": [
+    { "id": "no-show", "type": "duration_in_state", "state": "Reservada", "thresholdMs": 900000, "severity": "medium", "description": "Reserva sin check-in, riesgo de no-show" },
+    { "id": "sobremesa", "type": "duration_vs_baseline", "state": "Ocupada", "percentile": 90, "minSamples": 5, "severity": "low", "description": "Mesa ocupada mucho más tiempo que el promedio" },
+    { "id": "rush", "type": "frequency_in_window", "toState": "Ocupada", "windowMs": 900000, "count": 4, "severity": "low", "description": "Ráfaga de mesas ocupándose a la vez" }
+  ],
+  "actions": [
+    { "id": "avisar-dueno", "type": "ntfy", "description": "Notificación al celular del dueño del restaurante", "config": { "topic": "env:NTFY_TOPIC" } },
+    { "id": "liberar-reserva", "type": "state_mutation", "description": "Libera la reserva automáticamente para que la mesa vuelva a estar disponible", "config": { "toState": "Libre" } },
+    { "id": "ignore", "type": "noop", "description": "La situación no amerita ninguna acción" }
+  ],
+  "cooldownMs": 600000
+}
