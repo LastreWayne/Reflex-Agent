@@ -2549,22 +2549,53 @@ export async function POST(request: Request) {
 `app/api/execute/route.ts`:
 
 ```ts
+import { z } from "zod"
 import { execute } from "../../../adapters/executors/index.js"
-import { ActionSchema } from "../../../engine/schema.js"
+import { DomainConfigSchema, SeveritySchema } from "../../../engine/schema.js"
+import voltRaw from "../../../configs/volt.json" with { type: "json" }
+import restaurantRaw from "../../../configs/restaurant.json" with { type: "json" }
+
+const CONFIGS = {
+  volt: DomainConfigSchema.parse(voltRaw),
+  restaurant: DomainConfigSchema.parse(restaurantRaw),
+}
+
+const BodySchema = z.object({
+  domain: z.enum(["volt", "restaurant"]),
+  actionId: z.string().min(1),
+  decision: z.object({
+    actionId: z.string().min(1),
+    reason: z.string(),
+    message: z.string(),
+  }),
+  detection: z.object({
+    ruleId: z.string().min(1),
+    entityId: z.string().min(1),
+    detectedAt: z.string(),
+    severity: SeveritySchema,
+    evidence: z.record(z.string(), z.unknown()),
+    dedupKey: z.string(),
+    cooldownKey: z.string(),
+  }),
+})
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as {
-    action: unknown
-    decision: unknown
-    detection: unknown
+  const parsed = BodySchema.safeParse(await request.json())
+  if (!parsed.success) {
+    return Response.json({ error: "request inválido" }, { status: 400 })
   }
-  const action = ActionSchema.parse(body.action)
-  const result = await execute(
-    action,
-    body.decision as never,
-    body.detection as never,
-    process.env,
-  )
+  const { domain, actionId, decision, detection } = parsed.data
+
+  // La acción se resuelve en el SERVIDOR desde el config. El cliente manda solo
+  // un id: nunca puede elegir el destino del POST ni tocar actions[].config.
+  // Aceptar el objeto `action` desde el navegador sería SSRF en una URL pública,
+  // porque resolveEnv deja pasar sin tocar cualquier string sin prefijo `env:`.
+  const action = CONFIGS[domain].actions.find((a) => a.id === actionId)
+  if (!action) {
+    return Response.json({ error: "acción desconocida" }, { status: 400 })
+  }
+
+  const result = await execute(action, decision, detection, process.env)
   return Response.json({ result })
 }
 ```
