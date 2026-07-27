@@ -133,3 +133,8 @@ export interface StateStore {
   lastFiredAt(key: string): Date | null
   markFired(key: string, at: Date): void
 }
+
+/**
+ * Igual que StateStore: el motor declara la interfaz, el adapter la implementa.
+ */
+export type Decider = (detection: Detection, config: DomainConfig) => Promise<Decision>
