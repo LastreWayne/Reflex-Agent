@@ -1272,6 +1272,8 @@ export function evaluateDurationVsBaseline(rule: BaselineRule, ctx: EvalContext)
 Run: `npx vitest run engine/rules/duration-vs-baseline.test.ts`
 Expected: PASS, 5 tests.
 
+> **Shipeado: 7 tests.** A los 5 dictados arriba se sumaron una aserción de borde (`durationMs === baselineMs` no dispara) y, en la review, un test que fija que el `dedupKey` no depende del reloj. Ambos verificados load-bearing.
+
 - [ ] **Step 5: Escribir el registry**
 
 `engine/rules/index.ts`:
@@ -1476,6 +1478,8 @@ export function suppress(
 
 Run: `npx vitest run engine/detector.test.ts`
 Expected: PASS, 8 tests.
+
+> **Ojo:** el bloque de test dictado en el Step 6 contiene 7 `it(...)`, no 8. El octavo que shipeó es una aserción de borde agregada (`elapsed === cooldownMs` no suprime), así que el conteo coincide por casualidad. Si reescribís este step, contá los `it`.
 
 - [ ] **Step 11: Escribir los dos configs**
 
