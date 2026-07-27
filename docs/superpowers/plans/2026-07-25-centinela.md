@@ -1568,17 +1568,19 @@ describe("el mismo motor sobre dos dominios distintos", () => {
     expect(ids).toContain("no-show")
   })
 
-  it("cada config solo dispara sus propias reglas", () => {
+  it("cada config ve lo suyo en el mismo stream de eventos", () => {
     const volt = DomainConfigSchema.parse(voltRaw)
     const restaurant = DomainConfigSchema.parse(restaurantRaw)
-    const { events } = normalize([
+    const { events, errors } = normalize([
       { entityId: "mesa-7", timestamp: "2026-07-25T19:40:00.000Z", state: "Reservada" },
     ] satisfies unknown[])
+    expect(errors).toEqual([])
 
-    // El estado "Reservada" existe en ambos dominios, pero solo el restaurante
-    // tiene una regla que lo vigile.
-    expect(detect(events, restaurant, NOW).map((d) => d.ruleId)).toContain("no-show")
-    expect(detect(events, volt, NOW).filter((d) => d.ruleId === "no-show")).toEqual([])
+    // Mismo stream, dos configs. El restaurante ve una reserva sin check-in
+    // (no-show, 20 min > 15); VOLT ve una entidad sin heartbeat (offline,
+    // 20 min > 5). Cada motor produce exactamente la detección de SU dominio.
+    expect(detect(events, restaurant, NOW).map((d) => d.ruleId)).toEqual(["no-show"])
+    expect(detect(events, volt, NOW).map((d) => d.ruleId)).toEqual(["offline"])
   })
 })
 ```

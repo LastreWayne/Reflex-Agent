@@ -100,4 +100,14 @@ describe("evaluateDurationVsBaseline", () => {
     )
     expect(result).toEqual([])
   })
+
+  it("el dedupKey no depende del reloj", () => {
+    const intervals = [closed("A", 1000, 1), closed("A", 2000, 2), closed("A", 3000, 3), open("A", 9000)]
+    const at = (iso: string) =>
+      evaluateDurationVsBaseline(rule, { intervals, events: [], now: new Date(iso) })
+    const [a] = at("2026-07-25T10:30:00.000Z")
+    const [b] = at("2026-07-25T10:45:00.000Z")
+    expect(a!.dedupKey).toBe(b!.dedupKey)
+    expect(a!.dedupKey).toContain("2026-07-25T10:00:00.000Z") // el startedAt del abierto
+  })
 })
