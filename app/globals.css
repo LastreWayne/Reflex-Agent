@@ -1,269 +1,125 @@
 /*
- * Centinela — señalética industrial esmaltada.
+ * Reflex Agent — papel, tinta y un amarillo.
  *
- * La dirección vive en DESIGN.md; esta hoja la construye. Chapa pintada,
- * colores de señal con significado, diagonales de peligro como estructura, y
- * lámparas que son lámparas — lente, aro y sombra con desplazamiento.
+ * La dirección vive en DESIGN.md; esta hoja la construye. Un marco de vidrio
+ * embutido sobre un campo de líneas de flujo, un serif de display a escala
+ * enorme contra un cuerpo diminuto, y cinco pestañas mínimas abajo que se
+ * abren al pasar por encima.
  *
- * TODO el color y el ritmo viven en el bloque de tokens de acá abajo.
- * Cambiar de rumbo es editar esos valores, no reescribir la hoja: el resto del
- * archivo sólo usa los nombres semánticos (--placa, --tinta, --rojo-lente…).
+ * Reemplaza al mundo de señalética industrial esmaltada: no queda una chapa,
+ * un remache, un relieve ni un grano. Si volvés a necesitar uno, revisá
+ * DESIGN.md antes — están prohibidos por contrato.
+ *
+ * MODO CLARO ÚNICAMENTE. El modo oscuro se sacó por pedido del humano: no hay
+ * tokens `--d-*`, no hay rama de `prefers-color-scheme`, no hay interruptor.
+ *
+ * TODO el color y el ritmo viven en el bloque de tokens de acá abajo. Los
+ * ratios de contraste —incluido el del texto sobre vidrio en el PEOR momento
+ * del fondo animado— están medidos en `docs/design/contraste.mjs`
+ * (`node docs/design/contraste.mjs`), no estimados a ojo.
  *
  * El estado vive en el marcado (data-lane, data-status, data-severity,
- * data-source, data-open, data-lamp, data-view); esta hoja lo lee, nunca lo
- * re-deriva.
+ * data-source, data-open, data-lamp, data-view, data-fase…); esta hoja lo lee,
+ * nunca lo re-deriva.
  */
 
 /* ══════════════════════════════════════════════════════════════════════
-   1 · PALETA — los dos juegos de valores. Editar acá cambia el mundo.
+   1 · TOKENS
+
+   El amarillo puro NO pasa contraste sobre papel (1.46:1). Por eso hay tres
+   amarillos y cada uno tiene un trabajo:
+
+     --amarillo         relleno vivo. Lleva --sobre-amarillo encima (10.7:1).
+                        Como punto de luz o trazo va con --punto-aro debajo.
+     --oro              el amarillo cuando tiene que ser TEXTO o ícono
+                        (6.6:1 sobre papel).
+     --amarillo-palido  lavados y fondos de énfasis. Nunca texto.
    ══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── DÍA · chapa cálida al sol ────────────────────────────────────── */
-  --l-chapa: #e7dfd2;
-  --l-chapa-honda: #d5c9b6;
-  --l-placa: #f8f4ec;
-  --l-placa-alt: #efe8db;
-  --l-canto: #c7bba8;
-  --l-canto-duro: #93866f;
-  --l-remache: #b2a693;
-  --l-tinta: #221e18;
-  --l-tinta-media: #554c40;
-  --l-tinta-suave: #655a4a;
-  --l-acero-alto: #cdc2af;
-  --l-acero-bajo: #8b8070;
-  --l-brillo: rgba(255, 255, 255, 0.8);
-  --l-sombra: rgba(58, 45, 26, 0.2);
-  --l-sombra-dura: #bcae99;
-  --l-franja-oscura: #241f18;
-  --l-foco: #b8460c;
+  color-scheme: light;
 
-  --l-rojo: #a52a1b;
-  --l-rojo-lente: #e8412a;
-  --l-rojo-aro: #6d1a0f;
-  --l-rojo-tenue: #f6e2dc;
-  --l-ambar: #7f5303;
-  --l-ambar-lente: #f4ac1b;
-  --l-ambar-aro: #7a5206;
-  --l-ambar-tenue: #f8ecd2;
-  --l-naranja: #9e3c0c;
-  --l-naranja-lente: #ef6f1c;
-  --l-naranja-aro: #7c330e;
-  --l-naranja-tenue: #f9e6d6;
-  --l-claro-lente: #fffdf3;
-  --l-claro-aro: #7c6f59;
-  --l-apagada-lente: #c6bbaa;
-  --l-apagada-aro: #8b7f6e;
+  /* ── Papel y tinta ─────────────────────────────────────────────────── */
+  --papel: #f2efe7;
+  --papel-alto: #faf8f2;
+  --papel-hondo: #e7e3d8;
+  --tinta: #17140f;
+  --tinta-media: #57513f;
+  --tinta-tenue: #6b6450;
+  --linea: #ddd8c9;
+  --linea-fuerte: #bdb6a2;
+  --linea-control: #867f6b;
+  --velo: rgba(23, 20, 15, 0.06);
 
-  /* ── NOCHE · grafito de sala de control ───────────────────────────── */
-  --d-chapa: #22201b;
-  --d-chapa-honda: #17150f;
-  --d-placa: #2e2b25;
-  --d-placa-alt: #37332c;
-  --d-canto: #474137;
-  --d-canto-duro: #625b4f;
-  --d-remache: #564f44;
-  --d-tinta: #f4ede0;
-  --d-tinta-media: #bfb3a0;
-  --d-tinta-suave: #b0a48d;
-  --d-acero-alto: #6e6555;
-  --d-acero-bajo: #474033;
-  --d-brillo: rgba(255, 255, 255, 0.09);
-  --d-sombra: rgba(0, 0, 0, 0.55);
-  --d-sombra-dura: #14120d;
-  --d-franja-oscura: #14120d;
-  --d-foco: #ff9a52;
+  /* ── El amarillo, en sus tres papeles ──────────────────────────────── */
+  --amarillo: #f2c200;
+  --amarillo-alto: #ffd21e;
+  --punto-aro: #8a6b00;
+  --oro: #6a5000;
+  --amarillo-palido: #fbf0c9;
+  --sobre-amarillo: #1a1610;
 
-  --d-rojo: #ff8770;
-  --d-rojo-lente: #ef4a2f;
-  --d-rojo-aro: #58150a;
-  --d-rojo-tenue: #3a2019;
-  --d-ambar: #f7bd58;
-  --d-ambar-lente: #f6b431;
-  --d-ambar-aro: #6b4905;
-  --d-ambar-tenue: #382d16;
-  --d-naranja: #ff9a5e;
-  --d-naranja-lente: #f57722;
-  --d-naranja-aro: #6c2b0b;
-  --d-naranja-tenue: #3a2417;
-  --d-claro-lente: #fff7e6;
-  --d-claro-aro: #6a6053;
-  --d-apagada-lente: #3c382f;
-  --d-apagada-aro: #575044;
+  --foco: var(--oro);
 
-  /* ── PINTURA DE LAS TECLAS ────────────────────────────────────────
-     No cambia entre día y noche a propósito: una tecla esmaltada está
-     pintada del mismo color a las 3 de la tarde y a las 3 de la mañana.
-     Los valores están elegidos para que el blanco encima pase 4.5:1. */
-  --tecla-alta: #c9530f;
-  --tecla-baja: #8b3408;
-  --tecla-borde: #662406;
-  --tecla-peligro-alta: #b5301f;
-  --tecla-peligro-baja: #7c1c12;
-  --tecla-peligro-borde: #5c1109;
-  --tecla-tinta: #fffaf4;
+  /* ── Vidrio ────────────────────────────────────────────────────────
+     El vidrio es ESTRUCTURA, no decoración: sólo lo llevan las dos
+     superficies que de verdad se apoyan sobre el fondo animado — el
+     marco del hero y las pestañas. Ningún otro panel de la página lo usa.
 
-  /* ── RITMO ────────────────────────────────────────────────────────── */
+     Las opacidades no son gusto: son el resultado de medir el texto contra
+     el momento MÁS OSCURO del campo de líneas (dos trazos cruzados en el
+     pico del latido). Con 0.68 el título llega a 11.21:1 y la bajada a
+     4.83:1. `backdrop-filter: blur()` sólo promedia, así que el píxel real
+     nunca es peor que ese cálculo.
+
+     REGLA: dentro de `.hero`, fuera de las pestañas, no va `--tinta-tenue`.
+     Sobre el vidrio del marco en su peor momento no llega a 4.5:1. El
+     hero usa `--tinta` y `--tinta-media`, y nada más. Las pestañas sí pueden
+     (su vidrio es más denso: 5.03:1). */
+  --vidrio: rgba(250, 248, 242, 0.68);
+  --vidrio-opaco: rgba(250, 248, 242, 0.94);
+  --vidrio-pestana: rgba(250, 248, 242, 0.92);
+  --vidrio-pestana-alto: rgba(252, 250, 244, 0.95);
+  --vidrio-lustre: rgba(255, 255, 255, 0.5);
+  --desenfoque: 10px;
+  --desenfoque-pestana: 14px;
+
+  /* ── Ritmo ─────────────────────────────────────────────────────────
+     Un solo compás. Arriba de un título va más aire que abajo. */
   --e1: 0.25rem;
   --e2: 0.5rem;
   --e3: 0.75rem;
   --e4: 1rem;
   --e5: 1.5rem;
-  --e6: 2rem;
-  --e7: 3rem;
-  --e8: 4.5rem;
+  --e6: 2.25rem;
+  --e7: 3.5rem;
+  --e8: 5.5rem;
 
-  --radio: 3px;
-  --radio-placa: 7px;
-  --radio-grande: 12px;
-  /* Cuánto se levanta una placa de la chapa. Es la sombra con cuerpo. */
-  --relieve: 3px;
+  --radio: 4px;
+  --radio-tarjeta: 10px;
+  --radio-pestana: 12px;
+  --radio-marco: clamp(14px, 1.8vw, 26px);
+  --radio-pildora: 999px;
 
-  --rapido: 130ms;
-  --medio: 280ms;
-  --lento: 520ms;
+  --rapido: 140ms;
+  --medio: 320ms;
+  --lento: 560ms;
+  /* Salida exponencial. Es la única curva de la hoja. */
   --salida: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* ── TIPOGRAFÍA ───────────────────────────────────────────────────── */
-  --texto: var(--fuente), "Archivo", system-ui, -apple-system, sans-serif;
-  --ancho-display: 118;
-  --ancho-placa: 108;
+  /* ── Tipografía ────────────────────────────────────────────────────
+     Display: Instrument Serif (next/font, auto-hosteada).
+     Cuerpo: stack del sistema, a propósito. Ver DESIGN.md § Tipografía. */
+  --serif: var(--display), "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --texto: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
-
-  /* Grano de esmalte: fija, determinista, sin imagen externa. */
-  --grano: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* Medida de lectura del cuerpo corrido. */
+  --medida: 68ch;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   2 · MAPEO — los nombres semánticos que usa el resto de la hoja.
-        El bloque de noche aparece dos veces (preferencia del sistema y
-        elección explícita) pero los VALORES viven una sola vez, arriba.
-   ══════════════════════════════════════════════════════════════════════ */
-
-:root {
-  color-scheme: light;
-  --chapa: var(--l-chapa);
-  --chapa-honda: var(--l-chapa-honda);
-  --placa: var(--l-placa);
-  --placa-alt: var(--l-placa-alt);
-  --canto: var(--l-canto);
-  --canto-duro: var(--l-canto-duro);
-  --remache: var(--l-remache);
-  --tinta: var(--l-tinta);
-  --tinta-media: var(--l-tinta-media);
-  --tinta-suave: var(--l-tinta-suave);
-  --acero-alto: var(--l-acero-alto);
-  --acero-bajo: var(--l-acero-bajo);
-  --brillo: var(--l-brillo);
-  --sombra: var(--l-sombra);
-  --sombra-dura: var(--l-sombra-dura);
-  --franja-oscura: var(--l-franja-oscura);
-  --foco: var(--l-foco);
-  --rojo: var(--l-rojo);
-  --rojo-lente: var(--l-rojo-lente);
-  --rojo-aro: var(--l-rojo-aro);
-  --rojo-tenue: var(--l-rojo-tenue);
-  --ambar: var(--l-ambar);
-  --ambar-lente: var(--l-ambar-lente);
-  --ambar-aro: var(--l-ambar-aro);
-  --ambar-tenue: var(--l-ambar-tenue);
-  --naranja: var(--l-naranja);
-  --naranja-lente: var(--l-naranja-lente);
-  --naranja-aro: var(--l-naranja-aro);
-  --naranja-tenue: var(--l-naranja-tenue);
-  --claro-lente: var(--l-claro-lente);
-  --claro-aro: var(--l-claro-aro);
-  --apagada-lente: var(--l-apagada-lente);
-  --apagada-aro: var(--l-apagada-aro);
-  --grano-fuerza: 0.055;
-  --ver-claro: inline;
-  --ver-oscuro: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-tema="claro"]) {
-    color-scheme: dark;
-    --chapa: var(--d-chapa);
-    --chapa-honda: var(--d-chapa-honda);
-    --placa: var(--d-placa);
-    --placa-alt: var(--d-placa-alt);
-    --canto: var(--d-canto);
-    --canto-duro: var(--d-canto-duro);
-    --remache: var(--d-remache);
-    --tinta: var(--d-tinta);
-    --tinta-media: var(--d-tinta-media);
-    --tinta-suave: var(--d-tinta-suave);
-    --acero-alto: var(--d-acero-alto);
-    --acero-bajo: var(--d-acero-bajo);
-    --brillo: var(--d-brillo);
-    --sombra: var(--d-sombra);
-    --sombra-dura: var(--d-sombra-dura);
-    --franja-oscura: var(--d-franja-oscura);
-    --foco: var(--d-foco);
-    --rojo: var(--d-rojo);
-    --rojo-lente: var(--d-rojo-lente);
-    --rojo-aro: var(--d-rojo-aro);
-    --rojo-tenue: var(--d-rojo-tenue);
-    --ambar: var(--d-ambar);
-    --ambar-lente: var(--d-ambar-lente);
-    --ambar-aro: var(--d-ambar-aro);
-    --ambar-tenue: var(--d-ambar-tenue);
-    --naranja: var(--d-naranja);
-    --naranja-lente: var(--d-naranja-lente);
-    --naranja-aro: var(--d-naranja-aro);
-    --naranja-tenue: var(--d-naranja-tenue);
-    --claro-lente: var(--d-claro-lente);
-    --claro-aro: var(--d-claro-aro);
-    --apagada-lente: var(--d-apagada-lente);
-    --apagada-aro: var(--d-apagada-aro);
-    --grano-fuerza: 0.075;
-    --ver-claro: none;
-    --ver-oscuro: inline;
-  }
-}
-
-:root[data-tema="oscuro"] {
-  color-scheme: dark;
-  --chapa: var(--d-chapa);
-  --chapa-honda: var(--d-chapa-honda);
-  --placa: var(--d-placa);
-  --placa-alt: var(--d-placa-alt);
-  --canto: var(--d-canto);
-  --canto-duro: var(--d-canto-duro);
-  --remache: var(--d-remache);
-  --tinta: var(--d-tinta);
-  --tinta-media: var(--d-tinta-media);
-  --tinta-suave: var(--d-tinta-suave);
-  --acero-alto: var(--d-acero-alto);
-  --acero-bajo: var(--d-acero-bajo);
-  --brillo: var(--d-brillo);
-  --sombra: var(--d-sombra);
-  --sombra-dura: var(--d-sombra-dura);
-  --franja-oscura: var(--d-franja-oscura);
-  --foco: var(--d-foco);
-  --rojo: var(--d-rojo);
-  --rojo-lente: var(--d-rojo-lente);
-  --rojo-aro: var(--d-rojo-aro);
-  --rojo-tenue: var(--d-rojo-tenue);
-  --ambar: var(--d-ambar);
-  --ambar-lente: var(--d-ambar-lente);
-  --ambar-aro: var(--d-ambar-aro);
-  --ambar-tenue: var(--d-ambar-tenue);
-  --naranja: var(--d-naranja);
-  --naranja-lente: var(--d-naranja-lente);
-  --naranja-aro: var(--d-naranja-aro);
-  --naranja-tenue: var(--d-naranja-tenue);
-  --claro-lente: var(--d-claro-lente);
-  --claro-aro: var(--d-claro-aro);
-  --apagada-lente: var(--d-apagada-lente);
-  --apagada-aro: var(--d-apagada-aro);
-  --grano-fuerza: 0.075;
-  --ver-claro: none;
-  --ver-oscuro: inline;
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   3 · BASE
+   2 · BASE
    ══════════════════════════════════════════════════════════════════════ */
 
 *,
@@ -274,41 +130,35 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 body {
   margin: 0;
-  background: var(--chapa);
+  background: var(--papel);
   color: var(--tinta);
   font-family: var(--texto);
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.55;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
-  position: relative;
-  min-height: 100vh;
-}
-
-/* Grano de la pintura. Es la textura de la chapa, no un fondo decorado. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background-image: var(--grano);
-  opacity: var(--grano-fuerza);
-  pointer-events: none;
-  z-index: 0;
+  text-rendering: optimizeLegibility;
+  min-height: 100svh;
+  /* Nada de scroll lateral del documento: lo ancho scrollea en su caja. */
+  overflow-x: hidden;
 }
 
 .hoja {
-  position: relative;
-  z-index: 1;
-  max-width: 1500px;
+  max-width: 96rem;
   margin: 0 auto;
-  padding: var(--e5) var(--e5) var(--e7);
-  display: flex;
-  flex-direction: column;
-  gap: var(--e6);
+  padding-inline: clamp(var(--e4), 4vw, var(--e8));
+  padding-bottom: var(--e8);
 }
 
 .saltar {
@@ -316,12 +166,13 @@ body::before {
   left: var(--e4);
   top: var(--e4);
   z-index: 20;
-  transform: translateY(-200%);
-  background: var(--placa);
-  color: var(--tinta);
-  border: 1px solid var(--canto-duro);
-  border-radius: var(--radio);
-  padding: var(--e2) var(--e3);
+  transform: translateY(-250%);
+  background: var(--amarillo);
+  color: var(--sobre-amarillo);
+  border: 0;
+  border-radius: var(--radio-pildora);
+  padding: var(--e2) var(--e4);
+  font-size: 0.8125rem;
   font-weight: 600;
   text-decoration: none;
 }
@@ -330,6 +181,7 @@ body::before {
   transform: translateY(0);
 }
 
+/* Título de sección que existe para el lector de pantalla y no para el ojo. */
 .rotulo-seccion {
   position: absolute;
   width: 1px;
@@ -342,471 +194,548 @@ body::before {
 
 :focus-visible {
   outline: 2px solid var(--foco);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 ::selection {
-  background: var(--naranja-lente);
-  color: #fff;
+  background: var(--amarillo);
+  color: var(--sobre-amarillo);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   4 · MATERIALES — placa esmaltada, remaches, diagonales, lámparas
+   3 · PUNTO DE LUZ — la severidad y el estado se dicen con un punto.
+        Nunca con un borde de color al costado de una tarjeta.
+
+        Sobre papel el amarillo solo no se ve (1.46:1), así que el punto
+        encendido lleva aro de --punto-aro: 4.37:1 contra el papel, que es
+        lo que pide WCAG 1.4.11 para un objeto gráfico con significado.
    ══════════════════════════════════════════════════════════════════════ */
 
-.cartel-placa,
-.regleta,
-.consola,
-.estado-corrida,
-.carril,
-.mascota,
-.mando {
-  background:
-    linear-gradient(180deg, var(--placa) 0%, var(--placa) 55%, var(--placa-alt) 100%);
-  border: 1px solid var(--canto);
-  border-radius: var(--radio-placa);
-  box-shadow:
-    inset 0 1px 0 var(--brillo),
-    0 var(--relieve) 0 var(--sombra-dura),
-    0 calc(var(--relieve) + 3px) 12px var(--sombra);
+.lampara {
+  --nucleo: transparent;
+  --aro: var(--linea-fuerte);
+  --grosor: 1px;
+  flex: none;
+  display: inline-block;
+  width: var(--diam, 9px);
+  height: var(--diam, 9px);
+  border-radius: 50%;
+  background: var(--nucleo);
+  box-shadow: inset 0 0 0 var(--grosor) var(--aro);
+  vertical-align: 0.02em;
+  transition:
+    background var(--medio) var(--salida),
+    box-shadow var(--medio) var(--salida);
 }
 
-/* Remaches: cuatro bulones en las esquinas de las placas grandes. Van en una
-   sola capa de fondo para dejar los pseudo-elementos libres. */
-.remachada {
-  position: relative;
+/* Encendidos: los tres tonos de alerta comparten núcleo amarillo. La
+   distinción entre ellos la lleva el grosor del aro — cuánta luz hay —
+   porque esta paleta tiene un solo acento y no lo va a repartir en tres. */
+.lampara[data-lamp="rojo"] {
+  --nucleo: var(--amarillo);
+  --aro: var(--punto-aro);
+  --grosor: 2.5px;
 }
 
-.remachada::before {
-  content: "";
+.lampara[data-lamp="ambar"] {
+  --nucleo: var(--amarillo);
+  --aro: var(--punto-aro);
+  --grosor: 1.5px;
+}
+
+.lampara[data-lamp="naranja"] {
+  --nucleo: var(--amarillo);
+  --aro: var(--punto-aro);
+  --grosor: 1px;
+}
+
+/* Encendida sin alerta: el punto es tinta, presente y callado. */
+.lampara[data-lamp="claro"] {
+  --nucleo: transparent;
+  --aro: var(--tinta-tenue);
+  --grosor: 1.5px;
+}
+
+/* Apagada conserva el aro, sin núcleo: se ve que hay una lámpara y que no
+   prendió. Es exactamente lo que le pasa a una detección suprimida. */
+.lampara[data-lit="no"] {
+  --nucleo: transparent;
+  --aro: var(--linea-fuerte);
+  --grosor: 1px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   4 · FONDO DE FLUJO — las líneas que corren detrás del marco.
+
+        La geometría y el movimiento vienen del componente que pinneó el
+        humano (`references/background-paths.tsx`); acá están hechos con
+        `stroke-dasharray` + `stroke-dashoffset` en vez de framer-motion.
+        Con `pathLength="1"` en el path, el patrón mide exactamente 1, así
+        que correr el offset de 0 a −1 es una vuelta entera sin costura.
+
+        Vive DEBAJO del texto del hero: su opacidad tiene techo y el techo
+        está medido, no elegido a ojo. Ver § 1 · Vidrio.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.fondo-flujo {
   position: absolute;
   inset: 0;
+  z-index: 0;
+  overflow: hidden;
   pointer-events: none;
-  background-image:
-    radial-gradient(circle 4px at 22px 22px, var(--remache) 0 74%, rgba(0, 0, 0, 0.22) 74% 100%, transparent 100%),
-    radial-gradient(circle 4px at calc(100% - 22px) 22px, var(--remache) 0 74%, rgba(0, 0, 0, 0.22) 74% 100%, transparent 100%),
-    radial-gradient(circle 4px at 22px calc(100% - 22px), var(--remache) 0 74%, rgba(0, 0, 0, 0.22) 74% 100%, transparent 100%),
-    radial-gradient(circle 4px at calc(100% - 22px) calc(100% - 22px), var(--remache) 0 74%, rgba(0, 0, 0, 0.22) 74% 100%, transparent 100%);
 }
 
-/* Diagonales de peligro. Marcan zonas, nunca decoran un fondo vacío. */
-.peligro {
-  display: inline-block;
-  padding: 2px var(--e2) 2px calc(var(--e2) + 14px);
-  border: 1px solid var(--ambar-aro);
-  border-radius: 2px;
+/*
+ * DÓNDE VIVE CADA ANIMACIÓN, Y POR QUÉ. Esto está medido, no supuesto
+ * (`node docs/design/mirar.mjs` imprime los fps con el hero a la vista):
+ *
+ *   48 trazos, dash + opacidad POR TRAZO ........ 21 fps
+ *   48 trazos, sólo dash por trazo .............. 55 fps
+ *   48 trazos, dash por trazo + pulso en el svg . 60 fps  ← lo que se usa
+ *
+ * Animar `opacity` en cada `<path>` obliga a repintar el SVG entero en cada
+ * cuadro y hunde el frame rate; la cantidad de trazos casi no influye. El
+ * pulso se mudó entonces al `<svg>`, que con `will-change: opacity` se va a
+ * su propia capa y lo resuelve el compositor. El campo late en conjunto en
+ * vez de trazo por trazo: se pierde poco y se gana la página fluida.
+ */
+.fondo-flujo-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Sin movimiento la opacidad se queda acá. Con movimiento, manda el pulso. */
+  opacity: 0.6;
+}
+
+/* Tinta media, no tinta plena: un dibujo callado. Con este tono el campo
+   puede ser bastante más denso sin comerse el contraste del texto de arriba. */
+.flujo-linea {
+  fill: none;
+  stroke: var(--tinta-media);
+  stroke-linecap: round;
+  stroke-dasharray: var(--visible) var(--hueco);
+}
+
+/* Unas pocas líneas en oro. El amarillo no se reparte por el campo. */
+.flujo-linea[data-flujo="oro"] {
+  stroke: var(--punto-aro);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* El retraso es negativo: cada trazo entra con la animación ya empezada,
+     así el campo aparece repartido desde el primer cuadro en vez de
+     amontonado en el arranque de las curvas. */
+  .flujo-linea {
+    animation: flujo-corre var(--dur) linear var(--desfase) infinite;
+  }
+
+  .fondo-flujo-svg {
+    will-change: opacity;
+    animation: flujo-late 17s ease-in-out infinite;
+  }
+}
+
+/* Sin movimiento: las líneas quedan ENTERAS y quietas. No se ocultan. */
+@media (prefers-reduced-motion: reduce) {
+  .flujo-linea {
+    stroke-dasharray: none;
+  }
+}
+
+/* Con `pathLength="1"` el patrón mide exactamente 1: correr el offset una
+   unidad es una vuelta entera del path, sin costura. */
+@keyframes flujo-corre {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+
+/* El pico de 0.78 es el que entra en el cálculo de contraste del vidrio.
+   Si sube, hay que volver a correr docs/design/contraste.mjs. */
+@keyframes flujo-late {
+  0%,
+  100% {
+    opacity: 0.34;
+  }
+  50% {
+    opacity: 0.78;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   5 · PORTADA — el primer frame: un marco de vidrio embutido con el
+        título adentro y las cinco pestañas abajo. Nada más entra acá:
+        ni controles, ni carriles, ni mascota. Ver DESIGN.md.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* El respiro de afuera del marco es donde el campo de flujo se ve en crudo,
+   sin vidrio encima. Por eso no es de 4 px. */
+.portada {
+  position: relative;
+  min-height: 100svh;
+  padding: clamp(0.75rem, 2.2vw, 2rem);
+  display: flex;
+}
+
+/* El marco. Es una de las dos únicas superficies de vidrio de la página. */
+.hero {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--linea-control);
+  border-radius: var(--radio-marco);
+  padding: clamp(var(--e5), 4vh, var(--e7)) clamp(var(--e4), 4vw, var(--e7)) 0;
   background:
-    repeating-linear-gradient(
-        135deg,
-        var(--ambar-lente) 0 8px,
-        var(--franja-oscura) 8px 16px
-      )
-      left center / 12px 100% no-repeat,
-    var(--ambar-tenue);
-  color: var(--ambar);
-  font-weight: 650;
-  font-size: 0.75rem;
+    linear-gradient(to bottom, var(--vidrio-lustre) 0, rgba(255, 255, 255, 0) 22%),
+    var(--vidrio);
+  backdrop-filter: blur(var(--desenfoque)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--desenfoque)) saturate(1.1);
+}
+
+/* Sin backdrop-filter el vidrio no difumina nada: si se quedara traslúcido,
+   el texto quedaría sobre las líneas en crudo. Se vuelve casi opaco. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .hero {
+    background: var(--vidrio-opaco);
+  }
+}
+
+.hero-centro {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding-block: var(--e5);
+}
+
+.hero-titulo {
+  width: 100%;
+  max-width: 60rem;
+}
+
+/* El salto de escala ES el diseño: display enorme contra cuerpo diminuto. */
+.titular {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  line-height: 0.86;
+  letter-spacing: -0.025em;
+  color: var(--tinta);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-wrap: balance;
+}
+
+.titular-nombre {
+  display: block;
+  font-size: clamp(2.8rem, 14vw, 13rem);
+  /* Con `line-height: 0.86` la caja no cubre el descendente de la "g" de
+     Agent: sin este colchón, el lema se le monta encima. */
+  padding-bottom: 0.17em;
+}
+
+/* Dos líneas explícitas: "Reflex Agent" en una sola no puede ser enorme y
+   entrar a la vez. El espacio en el texto conserva el nombre accesible. */
+.titular-nombre > span {
+  display: block;
+}
+
+.titular-lema {
+  display: block;
+  font-style: italic;
+  font-size: clamp(1.05rem, 3.6vw, 2.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.012em;
+  color: var(--tinta-media);
+}
+
+.portada-bajada {
+  margin: clamp(var(--e5), 4vh, var(--e6)) auto 0;
+  max-width: min(66ch, 34rem);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--tinta-media);
+  text-wrap: pretty;
+}
+
+/* ── Las cinco pestañas ───────────────────────────────────────────────
+   Mínimas, apoyadas contra el borde de abajo del marco. Al pasar por
+   encima (o al recibir foco, o al tocarlas) crecen HACIA ARRIBA y se dejan
+   leer. La banda tiene alto fijo: así una pestaña abierta no empuja al
+   título ni mueve a sus vecinas. */
+
+.pestanas {
+  position: relative;
+  z-index: 2;
+  list-style: none;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 78rem;
+  height: clamp(6.5rem, 14vh, 8.5rem);
+  padding: 0 0 clamp(var(--e3), 2vh, var(--e5));
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(var(--e1), 0.6vw, var(--e2));
+}
+
+.pestana {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+}
+
+.pestana-boton {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--punto-aro);
+  border-radius: var(--radio-pestana);
+  background:
+    linear-gradient(to bottom, var(--vidrio-lustre) 0, rgba(255, 255, 255, 0) 60%),
+    var(--vidrio-pestana);
+  backdrop-filter: blur(var(--desenfoque-pestana)) saturate(1.15);
+  -webkit-backdrop-filter: blur(var(--desenfoque-pestana)) saturate(1.15);
+  transition:
+    background var(--rapido) linear,
+    box-shadow var(--rapido) linear;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .pestana-boton {
+    background: var(--vidrio-opaco);
+  }
+}
+
+.pestana-cima {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e2);
+  min-width: 0;
+}
+
+.pestana-orden {
+  flex: none;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--tinta-tenue);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--medio) var(--salida);
+}
+
+.pestana[data-encendida="si"] .pestana-orden {
+  color: var(--oro);
+}
+
+.pestana-titulo {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--serif);
+  font-size: 1.0625rem;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--tinta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pestana-lampara {
+  --diam: 8px;
+  align-self: center;
+}
+
+/* La caja pasa de 0fr a 1fr; el panel es el que recorta. */
+.pestana-caja {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--medio) var(--salida);
+}
+
+.pestana-panel {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.pestana-texto {
+  padding-top: var(--e2);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--tinta-media);
+  text-wrap: pretty;
+}
+
+/* Abierta: por puntero, por teclado, o por toque (`data-abierta`). Las tres
+   entradas comparten estado visual — un disclosure sólo-hover no lo puede
+   usar ni el teclado ni una pantalla táctil. */
+.pestana-boton:hover .pestana-caja,
+.pestana-boton:focus-visible .pestana-caja,
+.pestana[data-abierta="si"] .pestana-caja {
+  grid-template-rows: 1fr;
+}
+
+.pestana-boton:hover,
+.pestana-boton:focus-visible,
+.pestana[data-abierta="si"] .pestana-boton {
+  background:
+    linear-gradient(to bottom, var(--vidrio-lustre) 0, rgba(255, 255, 255, 0) 60%),
+    var(--vidrio-pestana-alto);
+  /* El filo amarillo por dentro del canto de oro: el oro carga el contraste
+     (4.29:1 sobre su propio vidrio), el amarillo carga la identidad. */
+  box-shadow: inset 0 0 0 1.5px var(--amarillo);
+}
+
+/* La etapa que el visor está mostrando queda marcada aunque nadie la toque. */
+.pestana[data-mirando="si"] .pestana-boton {
+  box-shadow: inset 0 0 0 1.5px var(--amarillo);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   6 · ESCENA — el motor corriendo, ya debajo del primer frame
+   ══════════════════════════════════════════════════════════════════════ */
+
+.escena {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e5);
+  scroll-margin-top: var(--e5);
+  padding-top: var(--e7);
+  /* El carril entra deslizándose: sin esto, durante esos 320 ms aparece una
+     barra de scroll horizontal. `clip` no crea contenedor de scroll. */
+  overflow-x: clip;
+  overflow-clip-margin: 24px;
+}
+
+.escena-cabeza {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e3);
+}
+
+.titulo-seccion {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2rem, 5.2vw, 3.6rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--tinta);
+  text-wrap: balance;
+}
+
+/* ── Lectura de la corrida ───────────────────────────────────────────── */
+
+.estado-corrida {
+  margin: 0;
+  max-width: var(--medida);
+  font-size: 0.8125rem;
+  color: var(--tinta-media);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.3em;
+  line-height: 1.7;
+}
+
+.estado-corrida strong {
+  color: var(--tinta);
+  font-weight: 600;
+}
+
+.estado-corrida .punto {
+  color: var(--linea-fuerte);
+}
+
+.estado-corrida time,
+.cifra {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.estado-corrida [data-modo="off"] {
+  color: var(--oro);
+  font-weight: 600;
+}
+
+.estado-corrida [data-modo="full"],
+.estado-corrida [data-modo="decide"] {
+  color: var(--tinta-tenue);
+}
+
+.estado-corrida [data-error="motor"] {
+  color: var(--tinta);
+  font-weight: 600;
+  background: var(--amarillo-palido);
+  padding: 0 0.35em;
+}
+
+/* La única píldora de amarillo vivo de la página: el modo forzado. Relleno
+   amarillo con tinta encima — 10.7:1. Nunca amarillo como texto. */
+.pildora {
+  display: inline-block;
+  padding: 0.15em 0.7em;
+  border-radius: var(--radio-pildora);
+  background: var(--amarillo);
+  color: var(--sobre-amarillo);
+  font-size: 0.6875rem;
+  font-weight: 700;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
-/* Lámpara: lente + aro + sombra con desplazamiento. Nunca un halo. */
-.lampara {
-  --lente: var(--apagada-lente);
-  --aro: var(--apagada-aro);
-  flex: none;
-  display: inline-block;
-  width: var(--diam, 11px);
-  height: var(--diam, 11px);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 34% 27%, rgba(255, 255, 255, 0.9) 0 11%, rgba(255, 255, 255, 0) 44%),
-    radial-gradient(circle at 50% 46%, var(--lente) 0 52%, var(--aro) 100%);
-  border: 1px solid var(--aro);
-  box-shadow:
-    inset 0 -1px 1px rgba(0, 0, 0, 0.32),
-    0 1px 0 var(--aro),
-    0 2px 3px var(--sombra);
-  vertical-align: -1px;
-  transition:
-    background var(--medio) var(--salida),
-    border-color var(--medio) var(--salida);
-}
-
-.lampara[data-lamp="rojo"] {
-  --lente: var(--rojo-lente);
-  --aro: var(--rojo-aro);
-}
-.lampara[data-lamp="ambar"] {
-  --lente: var(--ambar-lente);
-  --aro: var(--ambar-aro);
-}
-.lampara[data-lamp="naranja"] {
-  --lente: var(--naranja-lente);
-  --aro: var(--naranja-aro);
-}
-.lampara[data-lamp="claro"] {
-  --lente: var(--claro-lente);
-  --aro: var(--claro-aro);
-}
-
-/* Apagada conserva el aro del tono: se sabe de qué lámpara se trata, y que
-   no prendió. Es exactamente lo que pasa con una detección suprimida. */
-.lampara[data-lit="no"] {
-  --lente: var(--apagada-lente);
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.4),
-    0 1px 0 var(--brillo);
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   5 · CARTEL — encabezado en su propio espacio
-   ══════════════════════════════════════════════════════════════════════ */
-
-.cartel {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--e5);
-  flex-wrap: wrap;
-}
-
-.cartel-placa {
-  position: relative;
-  flex: 1 1 34rem;
-  padding: var(--e5) var(--e6);
-  overflow: hidden;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: var(--e6);
-}
-
-.cartel-marca,
-.cartel-titulo,
-.cartel-lema,
-.cartel-bajada {
-  grid-column: 1;
-}
-
-/* Clave de señales: qué significa cada color. Ocupa el flanco de la placa. */
-.clave {
-  grid-column: 2;
-  grid-row: 1 / span 4;
-  align-self: end;
-  margin: 0;
-  padding-left: var(--e5);
-  border-left: 1px solid var(--canto);
-  display: flex;
-  flex-direction: column;
-  gap: var(--e2);
-}
-
-.clave-fila {
-  display: flex;
-  align-items: baseline;
-  gap: var(--e2);
-  white-space: nowrap;
-}
-
-.clave dt {
-  display: flex;
-  align-items: center;
-  gap: var(--e2);
-  font-size: 0.75rem;
-  font-weight: 650;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--tinta-media);
-  min-width: 7.5em;
-}
-
-.clave dd {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--tinta-suave);
-}
-
-/* El marco pintado del cartel esmaltado: una línea de señal por dentro del
-   canto de la chapa. Es la firma de la señalética, no un borde de tarjeta. */
-.cartel-placa::after {
-  content: "";
-  position: absolute;
-  inset: 10px;
-  border: 2px solid var(--naranja-lente);
-  border-radius: 3px;
-  pointer-events: none;
-}
-
-.cartel-marca {
-  display: flex;
-  align-items: center;
-  gap: var(--e2);
-  margin: 0 0 var(--e3);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--tinta-media);
-}
-
-.cartel-piloto {
-  --diam: 13px;
-}
-
-.cartel-titulo {
-  margin: 0;
-  font-size: clamp(2.75rem, 8.2vw, 5rem);
-  line-height: 0.9;
-  font-weight: 700;
-  font-stretch: expanded;
-  font-variation-settings: "wdth" var(--ancho-display);
-  letter-spacing: -0.03em;
-  text-transform: uppercase;
-  color: var(--tinta);
-}
-
-.cartel-lema {
-  margin: var(--e3) 0 0;
-  font-size: clamp(1rem, 2.2vw, 1.375rem);
-  font-weight: 500;
-  font-stretch: semi-expanded;
-  font-variation-settings: "wdth" var(--ancho-placa);
-  color: var(--naranja);
-}
-
-.cartel-bajada {
-  margin: var(--e3) 0 0;
-  max-width: 58ch;
-  color: var(--tinta-media);
-}
-
-/* ── Interruptor de modo ─────────────────────────────────────────────── */
-
-.perilla {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--e2);
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--tinta-media);
-  background: var(--placa);
-  border: 1px solid var(--canto);
-  border-radius: 999px;
-  padding: var(--e1) var(--e3) var(--e1) var(--e1);
-  cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 var(--brillo),
-    0 2px 0 var(--sombra-dura);
-  transition: border-color var(--rapido) linear;
-}
-
-.perilla:hover {
-  border-color: var(--canto-duro);
-  color: var(--tinta);
-}
-
-.perilla-cuerpo {
-  display: block;
-  width: 40px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--chapa-honda);
-  border: 1px solid var(--canto-duro);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
-  position: relative;
-}
-
-.perilla-tecla {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 34% 28%, var(--brillo) 0 30%, transparent 60%),
-    var(--ambar-lente);
-  border: 1px solid var(--ambar-aro);
-  transition: transform var(--medio) var(--salida);
-}
-
-:root[data-tema="oscuro"] .perilla-tecla {
-  transform: translateX(18px);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-tema="claro"]) .perilla-tecla {
-    transform: translateX(18px);
-  }
-}
-
-.solo-claro {
-  display: var(--ver-claro);
-}
-.solo-oscuro {
-  display: var(--ver-oscuro);
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   6 · REGLETA — los cinco caminos, una placa dividida en bahías
-   ══════════════════════════════════════════════════════════════════════ */
-
-.regleta {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-.bahia {
-  position: relative;
-  min-width: 0;
-  display: flex;
-}
-
-/* La canaleta entre bahías: un rebaje troquelado, no un borde de 1px. */
-.bahia + .bahia::before {
-  content: "";
-  position: absolute;
-  inset: var(--e3) auto var(--e3) 0;
-  width: 2px;
-  background: var(--chapa-honda);
-  border-right: 1px solid var(--brillo);
-}
-
-.bahia-boton {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas:
-    "orden lampara"
-    "titulo titulo"
-    "texto texto";
-  align-items: center;
-  gap: var(--e1) var(--e2);
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: 0;
-  padding: var(--e4) var(--e4) var(--e5);
-  cursor: pointer;
-  transition: background var(--rapido) linear;
-}
-
-.bahia-boton:hover {
-  background: var(--placa-alt);
-}
-
-.bahia-orden {
-  grid-area: orden;
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-variation-settings: "wdth" var(--ancho-display);
-  line-height: 1;
-  color: var(--tinta-suave);
-  transition: color var(--medio) var(--salida);
-}
-
-.bahia-lampara {
-  grid-area: lampara;
-  justify-self: end;
-  --diam: 13px;
-}
-
-.bahia-titulo {
-  grid-area: titulo;
-  font-size: 1.0625rem;
-  font-weight: 650;
-  font-variation-settings: "wdth" var(--ancho-placa);
-  letter-spacing: -0.005em;
-  color: var(--tinta);
-}
-
-.bahia-texto {
-  grid-area: texto;
-  font-size: 0.8125rem;
-  line-height: 1.45;
-  color: var(--tinta-media);
-}
-
-/* Bahía encendida: el número se pinta con el color de la marca. */
-.bahia[data-encendida="si"] .bahia-orden {
-  color: var(--naranja);
-}
-
-/* Bahía que el visor está mostrando: la placa se hunde en la chapa. */
-.bahia[data-mirando="si"] {
-  background: var(--placa-alt);
-  box-shadow: inset 0 2px 4px var(--sombra);
-}
-
-.bahia[data-mirando="si"] .bahia-boton {
-  box-shadow: inset 0 -4px 0 var(--naranja-lente);
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   7 · BANDA — la pestaña de controles y la lectura de la corrida
-   ══════════════════════════════════════════════════════════════════════ */
+/* ── Banda de controles ──────────────────────────────────────────────── */
 
 .banda {
-  display: flex;
-  flex-direction: column;
-  gap: var(--e2);
-  margin-top: calc(var(--e6) * -0.5);
+  border-top: 1px solid var(--linea);
+  border-bottom: 1px solid var(--linea);
 }
 
 .consola {
-  overflow: hidden;
+  min-width: 0;
 }
 
 .consola-lengueta {
   width: 100%;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--e3);
   font: inherit;
+  font-size: 0.8125rem;
   text-align: left;
-  color: inherit;
+  color: var(--tinta);
   background: none;
   border: 0;
-  padding: var(--e3) var(--e4);
+  padding: var(--e3) 0;
   cursor: pointer;
-  transition: background var(--rapido) linear;
-}
-
-.consola-lengueta:hover {
-  background: var(--placa-alt);
-}
-
-/* El tirador de la pestaña: tres estrías, como una manija de chapa. */
-.consola-tirador {
-  flex: none;
-  width: 14px;
-  height: 20px;
-  border-radius: 2px;
-  background: repeating-linear-gradient(
-    90deg,
-    var(--canto-duro) 0 2px,
-    transparent 2px 5px
-  );
 }
 
 .consola-titulo {
-  font-weight: 650;
-  font-variation-settings: "wdth" var(--ancho-placa);
-  letter-spacing: 0.01em;
+  font-weight: 600;
+  flex: none;
 }
 
 .consola-resumen {
   flex: 1;
   min-width: 0;
-  font-size: 0.8125rem;
   color: var(--tinta-media);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -815,15 +744,11 @@ body::before {
 
 .consola-signo {
   flex: none;
-  font-size: 0.75rem;
-  font-weight: 650;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--naranja);
-  border: 1px solid var(--canto);
-  border-radius: 2px;
-  padding: 2px var(--e2);
-  background: var(--placa);
+  color: var(--oro);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  text-decoration-thickness: 1px;
 }
 
 /* La pestaña se agranda: la caja pasa de 0fr a 1fr. */
@@ -845,11 +770,11 @@ body::before {
 .controles {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
-  gap: var(--e4) var(--e5);
-  padding: var(--e4);
-  border-top: 1px solid var(--canto);
-  background: var(--placa-alt);
+  align-items: flex-start;
+  gap: var(--e4) var(--e6);
+  padding: var(--e2) 0 var(--e5);
+  border-top: 1px solid var(--linea);
+  margin-top: calc(var(--e1) * -1);
 }
 
 .grupo {
@@ -865,10 +790,9 @@ body::before {
 .grupo legend {
   padding: 0;
   font-size: 0.6875rem;
-  font-weight: 650;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--tinta-suave);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--tinta-tenue);
 }
 
 .grupo-cuerpo {
@@ -878,220 +802,138 @@ body::before {
   gap: var(--e2);
 }
 
-.tecla {
+/* ── El botón. Hairline y texto; el estado activo es el relleno amarillo. */
+
+.boton {
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  padding: var(--e2) var(--e3);
-  border: 1px solid var(--canto-duro);
-  border-radius: var(--radio);
-  background: linear-gradient(180deg, var(--placa) 0%, var(--placa-alt) 100%);
+  padding: var(--e2) var(--e4);
+  border: 1px solid var(--linea-control);
+  border-radius: var(--radio-pildora);
+  background: transparent;
   color: var(--tinta);
   cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 var(--brillo),
-    0 2px 0 var(--sombra-dura);
   transition:
-    transform var(--rapido) var(--salida),
-    box-shadow var(--rapido) var(--salida),
-    background var(--rapido) linear;
+    background var(--rapido) linear,
+    border-color var(--rapido) linear,
+    color var(--rapido) linear;
 }
 
-.tecla:hover {
-  background: var(--placa);
-  border-color: var(--tinta-suave);
+.boton:hover {
+  background: var(--velo);
 }
 
-.tecla:active {
-  transform: translateY(2px);
-  box-shadow: inset 0 1px 3px var(--sombra);
+.boton[aria-pressed="true"] {
+  background: var(--amarillo);
+  border-color: var(--amarillo);
+  color: var(--sobre-amarillo);
 }
 
-.tecla[aria-pressed="true"] {
-  background: linear-gradient(180deg, var(--tecla-alta) 0%, var(--tecla-baja) 100%);
-  border-color: var(--tecla-borde);
-  color: var(--tecla-tinta);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 2px 0 var(--tecla-borde);
+.boton[aria-pressed="true"]:hover {
+  background: var(--amarillo-alto);
+  border-color: var(--amarillo-alto);
 }
 
-.tecla[aria-pressed="true"]:hover {
-  background: linear-gradient(180deg, var(--tecla-alta) 0%, var(--tecla-baja) 100%);
-  border-color: var(--tecla-borde);
-  filter: brightness(1.08);
+.boton:disabled {
+  cursor: not-allowed;
+  color: var(--tinta-tenue);
+  border-color: var(--linea);
+  background: transparent;
 }
 
-.tecla-peligro[aria-pressed="true"] {
-  background: linear-gradient(180deg, var(--tecla-peligro-alta) 0%, var(--tecla-peligro-baja) 100%);
-  border-color: var(--tecla-peligro-borde);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    0 2px 0 var(--tecla-peligro-borde);
-}
-
+/* Ancho en rem y no en ch: Chrome mete los botones de incremento adentro de
+   la caja y con 7ch el valor se cortaba. */
 .grupo input[type="number"] {
-  width: 8ch;
+  width: 5.5rem;
   font: inherit;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  padding: var(--e2) var(--e2);
-  border: 1px solid var(--canto-duro);
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--linea-control);
   border-radius: var(--radio);
-  background: var(--chapa-honda);
+  background: var(--papel-hondo);
   color: var(--tinta);
-  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.25);
 }
 
-/* Palanca del modo offline: un interruptor de chapa, no un checkbox. */
-.palanca {
+.grupo input[type="number"]::placeholder {
+  color: var(--tinta-tenue);
+}
+
+/* Interruptor del modo offline: dos rieles y un punto. */
+.interruptor {
   display: inline-flex;
   align-items: center;
   gap: var(--e2);
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
-.palanca input {
+.interruptor input {
   position: absolute;
   opacity: 0;
   width: 0;
   height: 0;
 }
 
-.palanca-cuerpo {
-  width: 44px;
-  height: 24px;
-  border-radius: 3px;
-  background: var(--chapa-honda);
-  border: 1px solid var(--canto-duro);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+.interruptor-cuerpo {
+  width: 38px;
+  height: 20px;
+  border-radius: var(--radio-pildora);
+  background: transparent;
+  border: 1px solid var(--linea-control);
   position: relative;
+  transition:
+    background var(--rapido) linear,
+    border-color var(--rapido) linear;
 }
 
-.palanca-tecla {
+.interruptor-punto {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, var(--placa) 0%, var(--canto) 100%);
-  border: 1px solid var(--canto-duro);
-  transition: transform var(--medio) var(--salida);
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--tinta-tenue);
+  transition:
+    transform var(--medio) var(--salida),
+    background var(--rapido) linear;
 }
 
-.palanca input:checked + .palanca-cuerpo .palanca-tecla {
-  transform: translateX(20px);
-  background: linear-gradient(180deg, var(--ambar-lente) 0%, var(--ambar) 100%);
-  border-color: var(--ambar-aro);
+.interruptor input:checked + .interruptor-cuerpo {
+  background: var(--amarillo);
+  border-color: var(--amarillo);
 }
 
-.palanca input:focus-visible + .palanca-cuerpo {
+.interruptor input:checked + .interruptor-cuerpo .interruptor-punto {
+  transform: translateX(18px);
+  background: var(--sobre-amarillo);
+}
+
+.interruptor input:focus-visible + .interruptor-cuerpo {
   outline: 2px solid var(--foco);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
-.palanca-texto {
+.interruptor-texto {
   color: var(--tinta-media);
 }
 
-/* ── Lectura de la corrida ───────────────────────────────────────────── */
-
-.estado-corrida {
-  margin: 0;
-  padding: var(--e3) var(--e4);
-  font-size: 0.875rem;
-  color: var(--tinta-media);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35em;
-  line-height: 1.7;
-}
-
-.estado-corrida strong {
-  color: var(--tinta);
-  font-weight: 650;
-  font-variation-settings: "wdth" var(--ancho-placa);
-}
-
-.estado-corrida .punto {
-  color: var(--canto-duro);
-}
-
-.estado-corrida time,
-.cifra {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--tinta);
-}
-
-.estado-corrida [data-modo="off"] {
-  color: var(--naranja);
-  font-weight: 600;
-}
-
-.estado-corrida [data-modo="full"],
-.estado-corrida [data-modo="decide"] {
-  color: var(--tinta-suave);
-}
-
-.estado-corrida [data-error="motor"] {
-  color: var(--rojo);
-}
-
-/* La fase se lee en el borde superior: un testigo que avanza. */
-.estado-corrida {
-  position: relative;
-  overflow: hidden;
-}
-
-.estado-corrida::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  background: var(--canto);
-}
-
-.estado-corrida[data-fase="corriendo"]::before {
-  background: var(--ambar-lente);
-}
-
-.estado-corrida[data-fase="listo"]::before {
-  background: var(--naranja-lente);
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   8 · ESCENA — mando, visor y carriles
-   ══════════════════════════════════════════════════════════════════════ */
-
-.escena {
-  display: flex;
-  flex-direction: column;
-  gap: var(--e4);
-  scroll-margin-top: var(--e4);
-  /* El carril entra deslizándose 22px: sin esto, durante esos 280 ms
-     aparece una barra de scroll horizontal. `clip` no crea contenedor de
-     scroll, y el margen deja pasar la sombra de la placa. */
-  overflow-x: clip;
-  overflow-clip-margin: 20px;
-}
+/* ── Mando: las flechas y el selector de vista ───────────────────────── */
 
 .mando {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: var(--e4);
   flex-wrap: wrap;
-  padding: var(--e3);
 }
 
 .visor-mando {
-  flex: 1 1 20rem;
+  flex: 1 1 18rem;
   display: flex;
   align-items: center;
   gap: var(--e3);
@@ -1103,68 +945,55 @@ body::before {
 
 .paso {
   flex: none;
-  width: 56px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
-  font-size: 1.625rem;
-  font-weight: 600;
+  font-size: 1.125rem;
   line-height: 1;
   font-family: var(--texto);
-  color: var(--tecla-tinta);
-  background: linear-gradient(180deg, var(--tecla-alta) 0%, var(--tecla-baja) 100%);
-  border: 1px solid var(--tecla-borde);
-  border-radius: var(--radio);
+  color: var(--tinta);
+  background: transparent;
+  border: 1px solid var(--linea-control);
+  border-radius: 50%;
   cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 3px 0 var(--tecla-borde);
   transition:
-    transform var(--rapido) var(--salida),
-    box-shadow var(--rapido) var(--salida),
-    filter var(--rapido) linear;
+    background var(--rapido) linear,
+    border-color var(--rapido) linear,
+    color var(--rapido) linear;
 }
 
 .paso:hover:not(:disabled) {
-  filter: brightness(1.06);
-}
-
-.paso:active:not(:disabled) {
-  transform: translateY(3px);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+  background: var(--amarillo);
+  border-color: var(--amarillo);
+  color: var(--sobre-amarillo);
 }
 
 .paso:disabled {
   cursor: not-allowed;
-  background: var(--chapa-honda);
-  border-color: var(--canto-duro);
-  color: var(--tinta-suave);
-  box-shadow: inset 0 2px 3px var(--sombra);
+  color: var(--tinta-tenue);
+  border-color: var(--linea);
 }
 
 .visor-posicion {
-  flex: 1;
-  min-width: 0;
   margin: 0;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  text-align: center;
+  align-items: baseline;
+  gap: var(--e3);
+  min-width: 0;
 }
 
 .visor-etapa {
-  font-size: 1.125rem;
-  font-weight: 700;
-  font-variation-settings: "wdth" var(--ancho-placa);
-  letter-spacing: 0.01em;
+  font-family: var(--serif);
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  color: var(--tinta);
 }
 
 .visor-cuenta {
   font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--tinta-suave);
+  color: var(--tinta-tenue);
 }
 
 .selector-vista {
@@ -1172,31 +1001,20 @@ body::before {
   display: flex;
   align-items: center;
   gap: var(--e2);
-  padding-left: var(--e3);
-  border-left: 1px solid var(--canto);
 }
 
 .selector-rotulo {
   font-size: 0.6875rem;
-  font-weight: 650;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--tinta-suave);
+  font-weight: 600;
+  color: var(--tinta-tenue);
   margin-right: var(--e1);
 }
 
-/* En vista completa no hay flechas: la barra se encoge y se va a la derecha
-   en vez de quedar como una placa vacía. */
 .mando:has(.visor-mando[data-oculto="si"]) {
-  align-self: flex-end;
+  justify-content: flex-end;
 }
 
-.mando:has(.visor-mando[data-oculto="si"]) .selector-vista {
-  border-left: 0;
-  padding-left: 0;
-}
-
-.selector-vista .tecla {
+.selector-vista .boton {
   white-space: nowrap;
 }
 
@@ -1204,7 +1022,7 @@ body::before {
 
 .carriles {
   display: grid;
-  gap: var(--e3);
+  gap: var(--e4);
   align-items: start;
 }
 
@@ -1218,9 +1036,9 @@ body::before {
 
 .carril {
   min-width: 0;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  gap: var(--e3);
 }
 
 .carril[data-visible="no"] {
@@ -1228,407 +1046,355 @@ body::before {
 }
 
 .carril-cabeza {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
+  display: flex;
+  align-items: baseline;
   gap: var(--e3);
-  padding: var(--e3) var(--e4);
-  background: var(--placa-alt);
-  border-bottom: 1px solid var(--canto);
+  padding-bottom: var(--e2);
+  border-bottom: 1px solid var(--linea);
 }
 
 .carril-orden {
-  font-size: 1.375rem;
-  font-weight: 700;
-  font-variation-settings: "wdth" var(--ancho-display);
-  line-height: 1;
-  color: var(--tinta-suave);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--tinta-tenue);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--medio) var(--salida);
 }
 
+.carril[data-active="si"] .carril-orden {
+  color: var(--oro);
+}
+
+/* El rótulo no se estira: así el piloto queda junto al conteo y no huérfano
+   contra el margen derecho. */
 .carril-rotulo {
   min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--e3);
+  flex-wrap: wrap;
 }
 
 .carril h2 {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  font-variation-settings: "wdth" var(--ancho-placa);
-  letter-spacing: 0.005em;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.25rem;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
   color: var(--tinta);
 }
 
 .carril .conteo {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   color: var(--tinta-media);
 }
 
 .carril-piloto {
-  --diam: 12px;
-}
-
-/* Carril encendido: el número se pinta y la cabeza se calienta. */
-.carril[data-active="si"] .carril-orden {
-  color: var(--naranja);
+  --diam: 9px;
+  align-self: center;
 }
 
 .carril > ol {
   list-style: none;
   margin: 0;
-  padding: var(--e3);
+  padding: 0;
   display: grid;
   gap: var(--e2);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.carriles[data-view="full"] .carril > ol {
-  max-height: 58vh;
+/* Con los cinco al lado, el rótulo se apila y el conteo reserva dos líneas:
+   sin eso cada carril corta su hairline a una altura distinta y la fila se
+   ve descuadrada. */
+.carriles[data-view="full"] .carril-rotulo {
+  flex-direction: column;
+  gap: 0;
+  flex-wrap: nowrap;
 }
 
-/* ── Vista simple: un solo carril, mucho más grande ───────────────────── */
+.carriles[data-view="full"] .carril-cabeza {
+  align-items: flex-start;
+}
 
-.carriles[data-view="simple"] .carril-cabeza {
-  padding: var(--e4) var(--e5);
+.carriles[data-view="full"] .carril .conteo {
+  min-height: calc(2 * 1.55em);
+}
+
+.carriles[data-view="full"] .carril > ol {
+  max-height: 56vh;
+}
+
+/* ── Vista simple: un solo carril, con aire de verdad ─────────────────── */
+
+.carriles[data-view="simple"] .carril {
   gap: var(--e4);
 }
 
-.carriles[data-view="simple"] .carril-orden {
-  font-size: 2.75rem;
+.carriles[data-view="simple"] .carril h2 {
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  line-height: 1;
 }
 
-.carriles[data-view="simple"] .carril h2 {
-  font-size: clamp(1.5rem, 3.4vw, 2.125rem);
-  font-stretch: expanded;
-  font-variation-settings: "wdth" var(--ancho-display);
-  letter-spacing: -0.015em;
-  line-height: 1.05;
+.carriles[data-view="simple"] .carril-orden {
+  font-size: 0.75rem;
 }
 
 .carriles[data-view="simple"] .carril .conteo {
-  font-size: 0.9375rem;
-}
-
-.carriles[data-view="simple"] .carril-piloto {
-  --diam: 18px;
+  font-size: 0.8125rem;
 }
 
 .carriles[data-view="simple"] .carril > ol {
-  padding: var(--e4) var(--e5) var(--e5);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
   gap: var(--e3);
-  max-height: min(62vh, 560px);
-}
-
-.carriles[data-view="simple"] .vacio {
-  padding: var(--e6) var(--e5);
-  font-size: 1rem;
+  max-height: min(64vh, 620px);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   9 · TARJETAS — chapitas atornilladas al carril
+   7 · TARJETAS — hojitas de papel, sin relieve
    ══════════════════════════════════════════════════════════════════════ */
 
 .tarjeta {
   position: relative;
   min-width: 0;
-  border: 1px solid var(--canto);
-  border-radius: var(--radio);
-  padding: var(--e3);
-  background: var(--placa);
-  box-shadow:
-    inset 0 1px 0 var(--brillo),
-    0 1px 0 var(--sombra-dura);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio-tarjeta);
+  padding: var(--e3) var(--e4);
+  background: var(--papel-alto);
   overflow-wrap: anywhere;
 }
 
 .tarjeta-cabeza {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   flex-wrap: wrap;
   gap: var(--e1) var(--e2);
   margin: 0;
 }
 
+.tarjeta .lampara {
+  align-self: center;
+}
+
 .tarjeta .titulo {
-  font-weight: 650;
-  font-variation-settings: "wdth" var(--ancho-placa);
-  letter-spacing: 0.01em;
+  font-weight: 600;
+  letter-spacing: -0.005em;
   color: var(--tinta);
 }
 
 .tarjeta-hora {
   margin-left: auto;
-  font-size: 0.8125rem;
-  color: var(--tinta-suave);
+  font-size: 0.75rem;
+  color: var(--tinta-tenue);
   font-variant-numeric: tabular-nums;
 }
 
 .tarjeta-texto {
   margin: var(--e2) 0 0;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--tinta-media);
+  max-width: var(--medida);
 }
 
 .tarjeta dl {
   margin: var(--e2) 0 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 1px var(--e3);
-  font-size: 0.8125rem;
+  gap: 2px var(--e3);
+  font-size: 0.75rem;
 }
 
 .tarjeta dt {
-  color: var(--tinta-suave);
+  color: var(--tinta-tenue);
 }
 
 .tarjeta dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
   color: var(--tinta);
 }
 
 .tarjeta .dd-texto {
-  letter-spacing: 0;
   color: var(--tinta-media);
+  max-width: var(--medida);
 }
 
+/* Las etiquetas no son chips: son metadatos en voz baja. */
 .tarjeta .etiqueta {
-  display: inline-block;
   font-size: 0.6875rem;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border: 1px solid var(--canto);
-  border-radius: 2px;
-  padding: 1px var(--e1);
-  background: var(--placa-alt);
-  color: var(--tinta-media);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--tinta-tenue);
 }
 
 .tarjeta .sello {
   font-size: 0.6875rem;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ambar);
-  border: 1px dashed var(--ambar-aro);
-  border-radius: 2px;
-  padding: 1px var(--e1);
+  font-style: italic;
+  color: var(--oro);
 }
 
-.tarjeta .etiqueta[data-severity="high"] {
-  color: var(--rojo);
-  border-color: var(--rojo-aro);
-  background: var(--rojo-tenue);
-}
-
+.tarjeta .etiqueta[data-severity="high"],
 .tarjeta .etiqueta[data-severity="medium"] {
-  color: var(--ambar);
-  border-color: var(--ambar-aro);
-  background: var(--ambar-tenue);
+  color: var(--oro);
 }
 
-/* Silenciadas: la chapita se apaga, no se tacha. */
+/* Silenciadas: la hoja se apaga contra el papel de fondo, no se tacha. */
 .tarjeta[data-status="suprimida"],
 .tarjeta[data-status="fuera-de-cupo"] {
-  background: var(--placa-alt);
+  background: transparent;
   border-style: dashed;
-  box-shadow: none;
 }
 
 .tarjeta[data-status="suprimida"] .titulo,
 .tarjeta[data-status="fuera-de-cupo"] .titulo {
   color: var(--tinta-media);
+  font-weight: 500;
 }
 
-/* Intervalo abierto: la chapita queda sin cerrar por abajo. */
+/* Intervalo abierto: la hoja queda sin cerrar por abajo. */
 .tarjeta[data-open="si"] {
   border-bottom-style: dashed;
 }
 
-/* Pendiente: la chapita todavía no está atornillada. */
+/* Cargando: papel hundido y punto latiendo. */
 .tarjeta[data-status="pendiente"] {
-  border-style: dashed;
-  background: var(--placa-alt);
+  background: var(--papel-hondo);
+  border-color: var(--linea);
 }
 
-/* Zona de falla: la diagonal de peligro marca el borde superior. */
+/* Falla: lavado amarillo y hairline de oro. Sin franja, sin borde grueso. */
 .tarjeta[data-status="error"],
 .tarjeta[data-status="fallo"] {
-  border-color: var(--rojo-aro);
-  background: var(--rojo-tenue);
-  padding-top: calc(var(--e3) + 8px);
-}
-
-.tarjeta[data-status="error"]::before,
-.tarjeta[data-status="fallo"]::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 8px;
-  background: repeating-linear-gradient(
-    135deg,
-    var(--rojo-lente) 0 8px,
-    var(--franja-oscura) 8px 16px
-  );
+  background: var(--amarillo-palido);
+  border-color: var(--oro);
 }
 
 .tarjeta .aviso {
-  color: var(--rojo);
-  font-weight: 500;
+  color: var(--tinta);
+  font-weight: 600;
 }
 
-/* De dónde vino: lo real se marca con el naranja de la marca; lo pregrabado o
-   simulado queda punteado, como un sello provisorio. */
+/* De dónde vino: lo real se dice con oro; lo pregrabado o simulado queda en
+   itálica, como una nota al margen. */
 .tarjeta[data-source="claude"] .etiqueta[data-tag="fuente"],
 .tarjeta[data-source="real"] .etiqueta[data-tag="fuente"] {
-  color: var(--naranja);
-  border-color: var(--naranja-aro);
-  background: var(--naranja-tenue);
+  color: var(--oro);
 }
 
 .tarjeta[data-source="pregrabada"] .etiqueta[data-tag="fuente"],
 .tarjeta[data-source="simulada"] .etiqueta[data-tag="fuente"] {
-  border-style: dashed;
-  color: var(--tinta-suave);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--tinta-tenue);
 }
 
+/* Vacío: una línea en itálica, no una zona rayada. */
 .vacio {
   margin: 0;
-  padding: var(--e5) var(--e4);
-  color: var(--tinta-suave);
-  font-size: 0.875rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-weight: 600;
-  background: repeating-linear-gradient(
-    135deg,
-    var(--placa) 0 10px,
-    var(--placa-alt) 10px 20px
-  );
-  border-top: 1px solid var(--canto);
+  padding: var(--e6) 0;
+  color: var(--tinta-tenue);
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  font-style: italic;
+  letter-spacing: -0.01em;
+  text-align: center;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   10 · MASCOTA — el Reflex Agent bajo el carril único
+   8 · MASCOTA — el Reflex Agent, redibujado en papel y tinta.
+        Sigue viviendo bajo el carril único y sigue mirando al cursor.
+        Su refinamiento propio queda pendiente (DESIGN.md § Pendiente).
    ══════════════════════════════════════════════════════════════════════ */
 
 .mascota {
   --lx: -0.32;
   --ly: -0.5;
   margin: 0;
-  padding: var(--e5) var(--e4) var(--e4);
+  padding: var(--e6) 0 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--e3);
+  gap: var(--e4);
   align-self: center;
   width: min(100%, 30rem);
 }
 
 .mascota-svg {
-  width: min(100%, 260px);
+  width: min(100%, 220px);
   height: auto;
   overflow: visible;
 }
 
-/* — chapa y chasis — */
-.m-esmalte-alto {
-  stop-color: var(--naranja-lente);
-}
-.m-esmalte-bajo {
-  stop-color: var(--naranja);
-}
-.m-chasis-alto {
-  stop-color: var(--acero-alto);
-}
-.m-chasis-bajo {
-  stop-color: var(--acero-bajo);
-}
-.m-lente-centro {
-  stop-color: var(--claro-lente);
-}
-.m-lente-medio {
-  stop-color: var(--ambar-lente);
-}
-.m-lente-borde {
-  stop-color: var(--ambar-aro);
+/* Silueta de tinta sobre papel. */
+.m-cuerpo,
+.m-cuerpo rect {
+  fill: var(--tinta);
 }
 
-.m-canto {
-  stroke: var(--naranja-aro);
-  stroke-width: 1;
+.m-hueco {
+  fill: var(--papel);
 }
 
-.m-cabeza .m-canto {
-  stroke: var(--acero-bajo);
+/* El único amarillo del robot: la antena. Con su aro, como cualquier punto
+   de luz de la página. */
+.m-antena-lente {
+  fill: var(--amarillo);
 }
 
-.m-parpados rect {
-  fill: var(--acero-bajo);
-}
-
-.m-patas rect,
-.m-brazos rect,
-.m-cuello,
-.m-oreja,
-.m-antena-vara {
-  fill: var(--acero-bajo);
-}
-
-.m-remaches circle {
-  fill: var(--naranja-aro);
-  opacity: 0.55;
-}
-
-.m-ventana {
-  fill: var(--franja-oscura);
-  stroke: var(--naranja-aro);
-  stroke-width: 1;
+.m-antena-aro {
+  stroke: var(--punto-aro);
+  stroke-width: 1.25;
+  fill: none;
 }
 
 .m-numero {
-  fill: var(--ambar-lente);
+  fill: var(--tinta);
   font-family: var(--texto);
-  font-size: 26px;
-  font-weight: 700;
-  font-variation-settings: "wdth" var(--ancho-display);
+  font-size: 22px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
 }
 
-.m-franja {
-  fill: var(--franja-oscura);
-  opacity: 0.35;
+/* La sombra de piso es una elipse plana de papel hundido: se corre al lado
+   opuesto de la luz. Recorte de papel, no relieve. */
+.m-sombra-piso {
+  fill: var(--papel-hondo);
+  transform: translate(calc(var(--lx) * -22px), 0) scaleX(calc(1 + var(--lx) * 0.1));
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 90ms linear;
 }
 
-.m-visor {
-  fill: var(--franja-oscura);
-  opacity: 0.9;
+/* Un lavado suave que se corre con la luz. Es una aguada, no un especular. */
+.m-lavado-centro {
+  stop-color: var(--papel);
+  stop-opacity: 0.16;
+}
+.m-lavado-borde {
+  stop-color: var(--papel);
+  stop-opacity: 0;
 }
 
-.m-antena-sombra {
-  fill: var(--sombra-dura);
-}
-
-.m-antena-aro,
-.m-ojo-aro {
-  stroke: var(--claro-aro);
-  stroke-width: 1.5;
+.m-lavado {
+  transform: translate(calc(var(--lx) * 46px), calc(var(--ly) * 26px));
+  transition: transform 90ms linear;
 }
 
 .m-pupilas circle {
-  fill: var(--franja-oscura);
-  transform: translate(calc(var(--lx) * 3.6px), calc(var(--ly) * 2.6px));
+  fill: var(--tinta);
+  transform: translate(calc(var(--lx) * 3.4px), calc(var(--ly) * 2.6px));
   transition: transform 40ms linear;
 }
 
+/* Los párpados son del color del visor: al bajar se comen la pupila. */
 .m-parpados rect {
+  fill: var(--papel);
   transform: scaleY(0);
-  transform-origin: center;
+  transform-origin: bottom;
   transform-box: fill-box;
   transition: transform var(--medio) var(--salida);
 }
@@ -1645,125 +1411,98 @@ body::before {
   transition: transform 90ms linear;
 }
 
-/* El barrido de la lámpara de taller sobre la chapa pintada: un brillo
-   especular que se corre, y la sombra propia que va al lado opuesto. */
-.m-barrido-centro {
-  stop-color: #fff;
-  stop-opacity: 0.3;
-}
-.m-barrido-medio {
-  stop-color: #fff;
-  stop-opacity: 0.11;
-}
-.m-barrido-borde {
-  stop-color: #fff;
-  stop-opacity: 0;
-}
-.m-penumbra-centro {
-  stop-color: var(--franja-oscura);
-  stop-opacity: 0.4;
-}
-.m-penumbra-borde {
-  stop-color: var(--franja-oscura);
-  stop-opacity: 0;
+/* Antes de arrancar la antena está apagada: aro sin núcleo, igual que
+   cualquier punto de luz apagado de la página. */
+.mascota[data-mascota="inicio"] .m-antena-lente {
+  fill: var(--papel);
 }
 
-.m-brillo {
-  transform: translate(calc(var(--lx) * 52px), calc(var(--ly) * 30px));
-  transition: transform 90ms linear;
+.mascota[data-mascota="inicio"] .m-antena-aro {
+  stroke: var(--linea-fuerte);
 }
 
-.m-sombra-propia {
-  transform: translate(calc(var(--lx) * -58px), calc(var(--ly) * -32px));
-  transition: transform 90ms linear;
+/* Falla: el punto se apaga del todo y el aro se engrosa en tinta. Sin un
+   segundo color — esta paleta tiene uno solo. */
+.mascota[data-mascota="error"] .m-antena-lente {
+  fill: var(--papel);
 }
 
-.m-sombra-piso {
-  fill: var(--sombra-dura);
-  opacity: 0.7;
-  transform: translate(calc(var(--lx) * -26px), 0) scaleX(calc(1 + var(--lx) * 0.12));
-  transform-box: fill-box;
-  transform-origin: center;
-  transition: transform 90ms linear;
+.mascota[data-mascota="error"] .m-antena-aro {
+  stroke: var(--tinta);
+  stroke-width: 2.5;
 }
 
-/* La antena es una lámpara de verdad: cambia de tono con la fase. */
-.mascota[data-mascota="inicio"] .m-lente-medio {
-  stop-color: var(--apagada-lente);
-}
-.mascota[data-mascota="inicio"] .m-lente-borde {
-  stop-color: var(--apagada-aro);
-}
-.mascota[data-mascota="listo"] .m-lente-medio {
-  stop-color: var(--naranja-lente);
-}
-.mascota[data-mascota="listo"] .m-lente-borde {
-  stop-color: var(--naranja-aro);
-}
-.mascota[data-mascota="error"] .m-lente-medio {
-  stop-color: var(--rojo-lente);
-}
-.mascota[data-mascota="error"] .m-lente-borde {
-  stop-color: var(--rojo-aro);
+.mascota[data-mascota="error"] .mascota-detalle {
+  color: var(--tinta);
+  font-weight: 600;
 }
 
 .mascota-pie {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--e1);
   text-align: center;
 }
 
 .mascota-nombre {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--tinta-media);
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+  color: var(--tinta);
 }
 
 .mascota-detalle {
-  font-size: 0.8125rem;
-  color: var(--tinta-suave);
-}
-
-.mascota[data-mascota="error"] .mascota-detalle {
-  color: var(--rojo);
+  font-size: 0.75rem;
+  color: var(--tinta-media);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   11 · PIE
+   9 · PIE
    ══════════════════════════════════════════════════════════════════════ */
 
 .pie {
-  border-top: 1px solid var(--canto);
-  padding-top: var(--e4);
+  margin-top: var(--e8);
+  border-top: 1px solid var(--linea);
+  padding-top: var(--e5);
 }
 
 .leyenda {
   margin: 0;
-  max-width: 82ch;
-  font-size: 0.8125rem;
+  max-width: var(--medida);
+  font-size: 0.75rem;
+  line-height: 1.7;
   color: var(--tinta-media);
+  text-wrap: pretty;
 }
 
 .leyenda code {
   font-family: var(--mono);
-  font-size: 0.75rem;
-  background: var(--chapa-honda);
-  border: 1px solid var(--canto);
-  border-radius: 2px;
-  padding: 0 4px;
+  font-size: 0.6875rem;
   color: var(--tinta);
+  background: var(--papel-hondo);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   12 · MOVIMIENTO — un solo momento autoral: el pipeline avanzando
+   10 · MOVIMIENTO
+
+        Dos cosas se mueven en esta página, y son distintas:
+
+        · El CAMPO DE FLUJO (§ 4) es ambiente. Corre siempre, lento, detrás
+          del vidrio. Es el fondo que pidió el humano.
+
+        · El MOMENTO AUTORAL es uno solo y es el motor barriendo las cinco
+          etapas: el carril entra desde el lado hacia el que avanzó, las
+          hojitas se apoyan escalonadas, y las cinco pestañas se encienden
+          detrás. Una sola curva para las tres, y todo arranca de un default
+          YA VISIBLE.
+
+        No hay entrada al hacer scroll ni animación idéntica por sección.
    ══════════════════════════════════════════════════════════════════════ */
 
 @media (prefers-reduced-motion: no-preference) {
-  /* El carril entra por el lado hacia el que se movió el visor. */
   .carriles[data-view="simple"] .carril[data-visible="si"] {
     animation: entra-adelante var(--medio) var(--salida) both;
   }
@@ -1772,46 +1511,45 @@ body::before {
     animation-name: entra-atras;
   }
 
-  /* Las chapitas se atornillan de a una, escalonadas. */
   .carril[data-active="si"] .tarjeta {
     animation: aparece var(--medio) var(--salida) backwards;
-    animation-delay: calc(var(--i, 0) * 16ms);
+    animation-delay: calc(var(--i, 0) * 18ms);
   }
 
-  /* La lámpara de una decisión en vuelo late. Es carga, no adorno. */
+  /* Un punto de luz en vuelo late. Es carga, no adorno. */
   .lampara[data-beat="si"] {
-    animation: latido 1.15s ease-in-out infinite;
+    animation: latido 1.3s ease-in-out infinite;
   }
 }
 
 @keyframes entra-adelante {
   from {
     opacity: 0;
-    transform: translateX(22px);
+    transform: translateX(26px);
   }
 }
 
 @keyframes entra-atras {
   from {
     opacity: 0;
-    transform: translateX(-22px);
+    transform: translateX(-26px);
   }
 }
 
 @keyframes aparece {
   from {
     opacity: 0;
-    transform: translateY(9px);
+    transform: translateY(10px);
   }
 }
 
 @keyframes latido {
   0%,
   100% {
-    filter: brightness(1);
+    opacity: 1;
   }
   50% {
-    filter: brightness(1.45);
+    opacity: 0.35;
   }
 }
 
@@ -1826,29 +1564,34 @@ body::before {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   13 · ANCHOS
+   11 · ANCHOS Y ALTURAS
    ══════════════════════════════════════════════════════════════════════ */
 
-/* La clave de señales se apila cuando la placa deja de tener flanco. */
-@media (max-width: 1120px) {
-  .cartel-placa {
-    grid-template-columns: minmax(0, 1fr);
+/* Pantalla baja: el título cede altura para que las pestañas sigan
+   entrando en el primer frame. */
+@media (max-height: 760px) and (min-width: 901px) {
+  .titular-nombre {
+    font-size: clamp(2.6rem, 9vw, 7rem);
   }
 
-  .clave {
-    grid-column: 1;
-    grid-row: auto;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: var(--e2) var(--e4);
-    margin-top: var(--e4);
-    padding: var(--e3) 0 0;
-    border-left: 0;
-    border-top: 1px solid var(--canto);
+  .titular-lema {
+    font-size: clamp(1rem, 2.8vw, 1.75rem);
   }
 
-  .clave dt {
-    min-width: 0;
+  .hero-centro {
+    padding-block: var(--e3);
+  }
+}
+
+/* Pantalla alta y angosta (tableta en vertical): el título se mide contra el
+   ancho, así que a 834×1112 quedaba chico y abría un vacío enorme. */
+@media (min-width: 641px) and (min-aspect-ratio: 1/2) and (max-aspect-ratio: 9/10) {
+  .titular-nombre {
+    font-size: clamp(3.2rem, 17vw, 9.5rem);
+  }
+
+  .titular-lema {
+    font-size: clamp(1.15rem, 5vw, 2.6rem);
   }
 }
 
@@ -1856,36 +1599,15 @@ body::before {
   .carriles[data-view="full"] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  .regleta {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .bahia:nth-child(3n + 1)::before {
-    display: none;
-  }
-
-  .bahia:nth-child(n + 4) {
-    border-top: 2px solid var(--chapa-honda);
-  }
 }
 
 @media (max-width: 900px) {
   .hoja {
-    padding: var(--e5) var(--e4) var(--e6);
-    gap: var(--e6);
-  }
-
-  .cartel-placa {
-    padding: var(--e4) var(--e5);
+    padding-bottom: var(--e7);
   }
 
   .carriles[data-view="full"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .banda {
-    margin-top: calc(var(--e5) * -0.4);
   }
 
   .mando {
@@ -1894,22 +1616,37 @@ body::before {
   }
 
   /* En columna, `flex-basis` pasa a ser altura: sin esto la barra de mando
-     se estira a 20rem de alto. */
+     se estira a 18rem de alto. */
   .visor-mando {
     flex: none;
+    justify-content: space-between;
   }
 
   .selector-vista {
-    justify-content: center;
-    border-left: 0;
-    padding-left: 0;
-    padding-top: var(--e3);
-    border-top: 1px solid var(--canto);
+    justify-content: flex-end;
   }
 
-  .mando:has(.visor-mando[data-oculto="si"]) .selector-vista {
-    border-top: 0;
-    padding-top: 0;
+  /* Cinco pestañas no entran de frente en un teléfono: la banda se arrastra
+     de costado y cada pestaña se abre al tocarla. */
+  .pestanas {
+    height: clamp(6rem, 16vh, 8rem);
+    max-width: none;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 2px;
+    gap: var(--e2);
+    padding-bottom: var(--e3);
+  }
+
+  .pestana {
+    flex: 0 0 min(56%, 13rem);
+    scroll-snap-align: start;
+    align-items: flex-end;
+  }
+
+  .pestana-titulo {
+    font-size: 1rem;
   }
 }
 
@@ -1918,48 +1655,23 @@ body::before {
     font-size: 14px;
   }
 
-  .hoja {
-    padding: var(--e4) var(--e3) var(--e6);
-    gap: var(--e5);
+  .hero {
+    padding-inline: var(--e4);
   }
 
-  .cartel {
-    flex-direction: column-reverse;
-    align-items: flex-end;
-    gap: var(--e3);
+  /* En un teléfono el salto de escala se mantiene achicando el cuerpo, no
+     achicando el título: el título es lo que manda. */
+  .titular-nombre {
+    font-size: clamp(3.1rem, 16vw, 5rem);
   }
 
-  .cartel-placa {
-    width: 100%;
-    padding: var(--e4);
+  .portada-bajada {
+    margin-top: var(--e5);
+    font-size: 0.8125rem;
   }
 
-  .cartel-placa::after {
-    inset: 6px;
-  }
-
-  /* Archivo Expanded a escala de señal no entra en un teléfono: en pantallas
-     chicas la placa usa el ancho normal y un cuerpo que sí entra. */
-  /* Archivo Expanded a escala de señal necesita ancho: en un teléfono el
-     cuerpo se ata al viewport para que CENTINELA entre entera. */
-  .cartel-titulo {
-    font-size: min(11.8vw, 3rem);
-  }
-
-  .regleta {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .bahia::before {
-    display: none;
-  }
-
-  .bahia + .bahia {
-    border-top: 2px solid var(--chapa-honda);
-  }
-
-  .bahia-boton {
-    padding: var(--e3) var(--e4);
+  .escena {
+    padding-top: var(--e6);
   }
 
   .carriles[data-view="full"] {
@@ -1970,30 +1682,26 @@ body::before {
     max-height: 42vh;
   }
 
-  .carriles[data-view="simple"] .carril-cabeza {
-    padding-left: var(--e4);
-    padding-right: var(--e4);
-  }
-
   .carriles[data-view="simple"] .carril > ol {
-    padding: var(--e3) var(--e4) var(--e4);
-    max-height: 56vh;
-  }
-
-  .carriles[data-view="simple"] .carril-orden {
-    font-size: 2rem;
-  }
-
-  .paso {
-    width: 48px;
-    height: 44px;
+    max-height: 58vh;
   }
 
   .consola-resumen {
     display: none;
   }
 
+  .visor-posicion {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    text-align: center;
+  }
+
   .mascota-svg {
-    width: min(100%, 200px);
+    width: min(100%, 180px);
+  }
+
+  .pie {
+    margin-top: var(--e7);
   }
 }

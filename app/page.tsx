@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import type { ExecutionResult } from "../adapters/executors/index.js"
 import type { Decision, Detection, DomainConfig } from "../engine/schema.js"
 import { CONFIGS, DOMAIN_IDS } from "./domains.js"
+import { FondoFlujo } from "./fondo-flujo.js"
 import { Mascota, type FaseMascota } from "./mascota.js"
 import {
   buildRun,
@@ -52,8 +53,11 @@ type DecisionStatus = "pendiente" | "lista" | "error"
 type AccionStatus = "pendiente" | "ok" | "fallo" | "omitida"
 
 /**
- * Los cinco tonos de lámpara del mundo esmaltado. `claro` es la lente
- * incolora de "energizado, sin falla" — el verde no existe en esta paleta.
+ * Los cinco tonos del punto de luz. La paleta tiene un solo acento, así que
+ * los tres tonos de alerta comparten núcleo amarillo y se distinguen por
+ * cuánta luz llevan (el grosor del aro): `rojo` es el más cargado, `naranja`
+ * el más liviano. `claro` es el punto de tinta de "todo bien, sin alerta" —
+ * el verde no existe acá. El vocabulario de `data-lamp` no cambió a propósito.
  */
 type Tono = "rojo" | "ambar" | "naranja" | "claro" | "apagada"
 
@@ -76,7 +80,7 @@ const TONO_ESTADO: Record<string, Tono> = {
 
 const TONO_SEVERIDAD: Record<string, Tono> = { high: "rojo", medium: "ambar", low: "claro" }
 
-/** Las cinco etapas, en orden. Es la fuente única de la regleta y de los carriles. */
+/** Las cinco etapas, en orden. Es la fuente única de las tarjetas de la portada y de los carriles. */
 const ETAPAS = [
   {
     id: "eventos",
@@ -152,6 +156,8 @@ export default function Page() {
    */
   const [conduceLaPersona, setConduceLaPersona] = useState(false)
   const [controlesAbiertos, setControlesAbiertos] = useState(false)
+  /** Qué pestaña abrió un TOQUE. El puntero y el teclado los resuelve el CSS. */
+  const [pestanaAbierta, setPestanaAbierta] = useState<string | null>(null)
 
   // Los params se leen de la URL recién montado el componente: en el render
   // del servidor no hay `window`, y leerlo antes daría un mismatch.
@@ -303,9 +309,35 @@ export default function Page() {
     if (deLaPersona) setConduceLaPersona(true)
   }
 
+  /**
+   * Tocar una pestaña lleva el visor a esa etapa y baja hasta el motor: el
+   * primer frame no muestra carriles, así que el salto es parte de lo que
+   * hace la pestaña.
+   */
   const verEtapa = (indice: number) => {
     setVista("simple")
     irAEtapa(indice, true)
+    document.getElementById("escena")?.scrollIntoView({ block: "start" })
+  }
+
+  /**
+   * Una pestaña se abre con el puntero (`:hover`) y con el teclado
+   * (`:focus-visible`) desde el CSS. Este handler cubre el tercer caso: en un
+   * dispositivo SIN hover, el primer toque la abre para poder leerla y el
+   * segundo lleva a la etapa. Sin esto, en un teléfono el texto de la pestaña
+   * sería invisible — un disclosure sólo-hover no lo puede usar nadie que no
+   * tenga mouse.
+   *
+   * `matchMedia` se consulta dentro del evento, nunca durante el render: si se
+   * leyera al renderizar, el servidor y el navegador no coincidirían.
+   */
+  const tocarPestana = (id: string, indice: number) => {
+    if (!window.matchMedia("(hover: hover)").matches && pestanaAbierta !== id) {
+      setPestanaAbierta(id)
+      return
+    }
+    setPestanaAbierta(null)
+    verEtapa(indice)
   }
 
   const config: DomainConfig | null = params ? CONFIGS[params.domain] : null
@@ -534,244 +566,242 @@ export default function Page() {
         Saltar al pipeline
       </a>
 
-      <main className="hoja">
-        <header className="cartel">
-          <div className="cartel-placa remachada">
-            <p className="cartel-marca">
-              <Lampara tono="naranja" className="cartel-piloto" />
-              <span>Reflex Agent</span>
-            </p>
-            <h1 className="cartel-titulo">Centinela</h1>
-            <p className="cartel-lema">el mismo motor, dos dominios</p>
-            <p className="cartel-bajada">
-              El simulador, los intervalos, las reglas y la supresión corren en tu navegador. Sólo
-              la decisión de Claude y la ejecución de la acción pasan por el servidor.
-            </p>
+      <main>
+        {/* ── PRIMER FRAME ─────────────────────────────────────────────
+            Un marco de vidrio embutido sobre las líneas de flujo, con el
+            título adentro y las cinco pestañas mínimas abajo. Nada más
+            entra acá: ni controles, ni carriles, ni mascota. Ver DESIGN.md. */}
+        <header className="portada">
+          {/* Ver app/fondo-flujo.tsx: el fondo es un archivo aparte a propósito. */}
+          <FondoFlujo />
 
-            {/* La clave de señales: los tres colores no decoran, significan. */}
-            <dl className="clave">
-              <div className="clave-fila">
-                <dt>
-                  <Lampara tono="rojo" />
-                  <span>Rojo</span>
-                </dt>
-                <dd>falla</dd>
+          <div className="hero">
+            <div className="hero-centro">
+              <div className="hero-titulo">
+                <h1 className="titular">
+                  <span className="titular-nombre">
+                    <span>Reflex </span>
+                    <span>Agent</span>
+                  </span>
+                  <span className="titular-lema">el mismo motor, dos dominios</span>
+                </h1>
+                <p className="portada-bajada">
+                  El simulador, los intervalos, las reglas y la supresión corren en tu navegador.
+                  Sólo la decisión de Claude y la ejecución de la acción pasan por el servidor.
+                </p>
               </div>
-              <div className="clave-fila">
-                <dt>
-                  <Lampara tono="ambar" />
-                  <span>Ámbar</span>
-                </dt>
-                <dd>atención</dd>
-              </div>
-              <div className="clave-fila">
-                <dt>
-                  <Lampara tono="naranja" />
-                  <span>Naranja</span>
-                </dt>
-                <dd>el agente</dd>
-              </div>
-            </dl>
+            </div>
+
+            <h2 id="caminos-titulo" className="rotulo-seccion">
+              Los cinco caminos del motor
+            </h2>
+            <ol className="pestanas" aria-labelledby="caminos-titulo">
+              {ETAPAS.map((e, i) => (
+                <li
+                  key={e.id}
+                  className="pestana"
+                  data-stage={e.id}
+                  data-encendida={carriles > i ? "si" : "no"}
+                  data-mirando={vista === "simple" && etapa === i ? "si" : "no"}
+                  data-abierta={pestanaAbierta === e.id ? "si" : "no"}
+                >
+                  <button
+                    type="button"
+                    className="pestana-boton"
+                    data-action={`camino-${e.id}`}
+                    aria-current={vista === "simple" && etapa === i ? "step" : undefined}
+                    onClick={() => tocarPestana(e.id, i)}
+                  >
+                    <span className="pestana-cima">
+                      <span className="pestana-orden" aria-hidden="true">{`0${i + 1}`}</span>
+                      <span className="pestana-titulo">{e.titulo}</span>
+                      <Lampara
+                        tono={carriles > i ? "naranja" : "apagada"}
+                        encendida={carriles > i}
+                        className="pestana-lampara"
+                      />
+                    </span>
+                    <span className="pestana-caja">
+                      <span className="pestana-panel">
+                        <span className="pestana-texto">{e.explica}</span>
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ol>
           </div>
-          <SelectorTema />
         </header>
 
-        <section className="caminos" aria-labelledby="caminos-titulo">
-          <h2 id="caminos-titulo" className="rotulo-seccion">
-            Los cinco caminos del motor
-          </h2>
-          <ol className="regleta">
-            {ETAPAS.map((e, i) => (
-              <li
-                key={e.id}
-                className="bahia"
-                data-stage={e.id}
-                data-encendida={carriles > i ? "si" : "no"}
-                data-mirando={vista === "simple" && etapa === i ? "si" : "no"}
-              >
+        <div className="hoja">
+        {/* ── EL MOTOR ─────────────────────────────────────────────────── */}
+        <section className="escena" id="escena" data-view={vista} aria-labelledby="escena-titulo">
+          <div className="escena-cabeza">
+            <h2 id="escena-titulo" className="titulo-seccion">
+              El motor, corriendo
+            </h2>
+
+            <p
+              className="estado-corrida"
+              data-fase={listo ? "listo" : snapshot ? "corriendo" : "inicio"}
+            >
+              {fallo ? (
+                <strong data-error="motor">{fallo}</strong>
+              ) : !params || !snapshot || !config ? (
+                "Preparando la corrida…"
+              ) : (
+                <>
+                  <strong>{config.displayName}</strong> <span className="punto">·</span> semilla{" "}
+                  <span className="cifra">{params.seed}</span> <span className="punto">·</span>{" "}
+                  <span className="cifra">{snapshot.events.length}</span> eventos sobre{" "}
+                  {config.entity.plural} <span className="punto">·</span> ventana{" "}
+                  <time dateTime={snapshot.from.toISOString()}>
+                    {formatClock(snapshot.from.toISOString())}
+                  </time>
+                  –
+                  <time dateTime={snapshot.now.toISOString()}>
+                    {formatClock(snapshot.now.toISOString())}
+                  </time>{" "}
+                  UTC <span className="punto">·</span>{" "}
+                  <span data-modo={params.offline}>
+                    {params.offline === "off"
+                      ? "en vivo (Claude decide)"
+                      : params.offline === "decide"
+                        ? "offline: decisiones pregrabadas, acciones reales"
+                        : "offline: decisiones pregrabadas, acciones simuladas"}
+                  </span>
+                  {params.forceIncident && (
+                    <span className="pildora" data-modo="forzado">
+                      incidente forzado
+                    </span>
+                  )}{" "}
+                  <span className="punto">·</span>{" "}
+                  {listo ? "listo" : `decidiendo ${decididas}/${snapshot.queued.length}`}
+                </>
+              )}
+            </p>
+          </div>
+
+          <div className="banda">
+            {params && (
+              <div className="consola" data-abierta={controlesAbiertos ? "si" : "no"}>
                 <button
                   type="button"
-                  className="bahia-boton"
-                  data-action={`camino-${e.id}`}
-                  aria-current={vista === "simple" && etapa === i ? "step" : undefined}
-                  onClick={() => verEtapa(i)}
+                  className="consola-lengueta"
+                  data-action="controles"
+                  aria-expanded={controlesAbiertos}
+                  aria-controls="consola-panel"
+                  onClick={() => setControlesAbiertos((v) => !v)}
                 >
-                  <span className="bahia-orden" aria-hidden="true">{`0${i + 1}`}</span>
-                  <Lampara
-                    tono={carriles > i ? "naranja" : "apagada"}
-                    encendida={carriles > i}
-                    className="bahia-lampara"
-                  />
-                  <span className="bahia-titulo">{e.titulo}</span>
-                  <span className="bahia-texto">{e.explica}</span>
+                  <span className="consola-titulo">Controles</span>
+                  <span className="consola-resumen">
+                    {CONFIGS[params.domain].displayName} · semilla {params.seed}
+                    {params.forceIncident ? " · forzado" : ""}
+                    {params.offline === "off" ? "" : " · offline"}
+                  </span>
+                  <span className="consola-signo" aria-hidden="true">
+                    {controlesAbiertos ? "Cerrar" : "Abrir"}
+                  </span>
                 </button>
-              </li>
-            ))}
-          </ol>
-        </section>
 
-        <div className="banda">
-          {params && (
-            <div className="consola" data-abierta={controlesAbiertos ? "si" : "no"}>
-              <button
-                type="button"
-                className="consola-lengueta"
-                data-action="controles"
-                aria-expanded={controlesAbiertos}
-                aria-controls="consola-panel"
-                onClick={() => setControlesAbiertos((v) => !v)}
-              >
-                <span className="consola-tirador" aria-hidden="true" />
-                <span className="consola-titulo">Controles</span>
-                <span className="consola-resumen">
-                  {CONFIGS[params.domain].displayName} · semilla {params.seed}
-                  {params.forceIncident ? " · forzado" : ""}
-                  {params.offline === "off" ? "" : " · offline"}
-                </span>
-                <span className="consola-signo" aria-hidden="true">
-                  {controlesAbiertos ? "Cerrar" : "Abrir"}
-                </span>
-              </button>
+                <div className="consola-caja">
+                  <div className="consola-panel" id="consola-panel" inert={!controlesAbiertos}>
+                    <div className="controles">
+                      <fieldset className="grupo">
+                        <legend>Dominio</legend>
+                        <div className="grupo-cuerpo">
+                          {DOMAIN_IDS.map((id) => (
+                            <button
+                              key={id}
+                              type="button"
+                              className="boton"
+                              data-action={`dominio-${id}`}
+                              aria-pressed={params.domain === id}
+                              onClick={() => cambiar({ domain: id, forceIncident: false })}
+                            >
+                              {CONFIGS[id].displayName}
+                            </button>
+                          ))}
+                        </div>
+                      </fieldset>
 
-              <div className="consola-caja">
-                <div className="consola-panel" id="consola-panel" inert={!controlesAbiertos}>
-                  <div className="controles">
-                    <fieldset className="grupo">
-                      <legend>Dominio</legend>
-                      <div className="grupo-cuerpo">
-                        {DOMAIN_IDS.map((id) => (
-                          <button
-                            key={id}
-                            type="button"
-                            className="tecla"
-                            data-action={`dominio-${id}`}
-                            aria-pressed={params.domain === id}
-                            onClick={() => cambiar({ domain: id, forceIncident: false })}
-                          >
-                            {CONFIGS[id].displayName}
-                          </button>
-                        ))}
-                      </div>
-                    </fieldset>
-
-                    <fieldset className="grupo">
-                      <legend>
-                        <label htmlFor="seed">Semilla</label>
-                      </legend>
-                      <div className="grupo-cuerpo">
-                        <input
-                          id="seed"
-                          type="number"
-                          min={1}
-                          value={params.seed}
-                          data-action="semilla"
-                          onChange={(e) => {
-                            const next = Number.parseInt(e.target.value, 10)
-                            if (Number.isFinite(next) && next > 0) cambiar({ seed: next })
-                          }}
-                        />
-                      </div>
-                    </fieldset>
-
-                    <fieldset className="grupo">
-                      <legend>Corrida</legend>
-                      <div className="grupo-cuerpo">
-                        <button
-                          type="button"
-                          className="tecla tecla-peligro"
-                          data-action="forzar-incidente"
-                          aria-pressed={params.forceIncident}
-                          onClick={() => cambiar({ forceIncident: true })}
-                        >
-                          Forzar incidente
-                        </button>
-
-                        {/* Reiniciar vuelve a la corrida normal y la re-ejecuta: es el
-                            inverso de "Forzar incidente". `cambiar` siempre crea un objeto
-                            nuevo, así que el pipeline arranca de cero aunque nada cambie. */}
-                        <button
-                          type="button"
-                          className="tecla"
-                          data-action="reiniciar"
-                          onClick={() => cambiar({ forceIncident: false })}
-                        >
-                          Reiniciar
-                        </button>
-                      </div>
-                    </fieldset>
-
-                    <fieldset className="grupo">
-                      <legend>
-                        <label htmlFor="offline">Modo offline</label>
-                      </legend>
-                      <div className="grupo-cuerpo">
-                        <label className="palanca" htmlFor="offline">
+                      <fieldset className="grupo">
+                        <legend>
+                          <label htmlFor="seed">Semilla</label>
+                        </legend>
+                        <div className="grupo-cuerpo">
                           <input
-                            id="offline"
-                            type="checkbox"
-                            data-action="offline"
-                            checked={params.offline !== "off"}
-                            onChange={(e) =>
-                              cambiar({ offline: e.target.checked ? "full" : "off" })
-                            }
+                            id="seed"
+                            type="number"
+                            min={1}
+                            value={params.seed}
+                            data-action="semilla"
+                            onChange={(e) => {
+                              const next = Number.parseInt(e.target.value, 10)
+                              if (Number.isFinite(next) && next > 0) cambiar({ seed: next })
+                            }}
                           />
-                          <span className="palanca-cuerpo" aria-hidden="true">
-                            <span className="palanca-tecla" />
-                          </span>
-                          <span className="palanca-texto">
-                            {params.offline === "off" ? "Apagado" : "Encendido"}
-                          </span>
-                        </label>
-                      </div>
-                    </fieldset>
+                        </div>
+                      </fieldset>
+
+                      <fieldset className="grupo">
+                        <legend>Corrida</legend>
+                        <div className="grupo-cuerpo">
+                          <button
+                            type="button"
+                            className="boton"
+                            data-action="forzar-incidente"
+                            aria-pressed={params.forceIncident}
+                            onClick={() => cambiar({ forceIncident: true })}
+                          >
+                            Forzar incidente
+                          </button>
+
+                          {/* Reiniciar vuelve a la corrida normal y la re-ejecuta: es el
+                              inverso de "Forzar incidente". `cambiar` siempre crea un objeto
+                              nuevo, así que el pipeline arranca de cero aunque nada cambie. */}
+                          <button
+                            type="button"
+                            className="boton"
+                            data-action="reiniciar"
+                            onClick={() => cambiar({ forceIncident: false })}
+                          >
+                            Reiniciar
+                          </button>
+                        </div>
+                      </fieldset>
+
+                      <fieldset className="grupo">
+                        <legend>
+                          <label htmlFor="offline">Modo offline</label>
+                        </legend>
+                        <div className="grupo-cuerpo">
+                          <label className="interruptor" htmlFor="offline">
+                            <input
+                              id="offline"
+                              type="checkbox"
+                              data-action="offline"
+                              checked={params.offline !== "off"}
+                              onChange={(e) =>
+                                cambiar({ offline: e.target.checked ? "full" : "off" })
+                              }
+                            />
+                            <span className="interruptor-cuerpo" aria-hidden="true">
+                              <span className="interruptor-punto" />
+                            </span>
+                            <span className="interruptor-texto">
+                              {params.offline === "off" ? "Apagado" : "Encendido"}
+                            </span>
+                          </label>
+                        </div>
+                      </fieldset>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          <p
-            className="estado-corrida"
-            data-fase={listo ? "listo" : snapshot ? "corriendo" : "inicio"}
-          >
-            {fallo ? (
-              <strong data-error="motor">{fallo}</strong>
-            ) : !params || !snapshot || !config ? (
-              "Preparando la corrida…"
-            ) : (
-              <>
-                <strong>{config.displayName}</strong> <span className="punto">·</span> semilla{" "}
-                <span className="cifra">{params.seed}</span> <span className="punto">·</span>{" "}
-                <span className="cifra">{snapshot.events.length}</span> eventos sobre{" "}
-                {config.entity.plural} <span className="punto">·</span> ventana{" "}
-                <time dateTime={snapshot.from.toISOString()}>
-                  {formatClock(snapshot.from.toISOString())}
-                </time>
-                –
-                <time dateTime={snapshot.now.toISOString()}>
-                  {formatClock(snapshot.now.toISOString())}
-                </time>{" "}
-                UTC <span className="punto">·</span>{" "}
-                <span data-modo={params.offline}>
-                  {params.offline === "off"
-                    ? "en vivo (Claude decide)"
-                    : params.offline === "decide"
-                      ? "offline: decisiones pregrabadas, acciones reales"
-                      : "offline: decisiones pregrabadas, acciones simuladas"}
-                </span>
-                {params.forceIncident && (
-                  <span className="peligro" data-modo="forzado">
-                    incidente forzado
-                  </span>
-                )}{" "}
-                <span className="punto">·</span>{" "}
-                {listo ? "listo" : `decidiendo ${decididas}/${snapshot.queued.length}`}
-              </>
             )}
-          </p>
-        </div>
+          </div>
 
-        <section className="escena" id="escena" data-view={vista} aria-label="El pipeline">
           <div className="mando">
             <div className="visor-mando" data-oculto={vista === "full" ? "si" : "no"}>
               <button
@@ -809,7 +839,7 @@ export default function Page() {
               </span>
               <button
                 type="button"
-                className="tecla"
+                className="boton"
                 data-action="vista-simple"
                 aria-pressed={vista === "simple"}
                 onClick={() => setVista("simple")}
@@ -818,7 +848,7 @@ export default function Page() {
               </button>
               <button
                 type="button"
-                className="tecla"
+                className="boton"
                 data-action="vista-completa"
                 aria-pressed={vista === "full"}
                 onClick={() => setVista("full")}
@@ -860,14 +890,17 @@ export default function Page() {
             idéntica hasta el timestamp.
           </p>
         </footer>
+        </div>
       </main>
     </>
   )
 }
 
 /**
- * Una lámpara de señalización: lente, aro y sombra con desplazamiento. No es
- * un halo — el mundo esmaltado refleja luz, no la emite.
+ * Un punto de luz: núcleo y aro, nada más. Es como se dice la severidad y el
+ * estado en toda la página — nunca con un borde de color al costado de una
+ * tarjeta. Sobre papel el amarillo solo no llega a 3:1, así que el aro
+ * (`--punto-aro`) es el que carga el contraste; el CSS lo resuelve.
  */
 function Lampara({
   tono,
@@ -888,54 +921,6 @@ function Lampara({
       data-beat={latiendo ? "si" : "no"}
       aria-hidden="true"
     />
-  )
-}
-
-/**
- * El interruptor de modo. El aspecto lo resuelve el CSS con
- * `prefers-color-scheme` y `[data-tema]`, así que se ve bien desde el primer
- * pintado; el estado de React sólo existe para que `aria-pressed` diga la
- * verdad.
- */
-function SelectorTema() {
-  const [oscuro, setOscuro] = useState(false)
-
-  useEffect(() => {
-    const elegido = document.documentElement.getAttribute("data-tema")
-    if (elegido === "claro" || elegido === "oscuro") {
-      setOscuro(elegido === "oscuro")
-      return
-    }
-    setOscuro(window.matchMedia("(prefers-color-scheme: dark)").matches)
-  }, [])
-
-  const alternar = () => {
-    const proximo = oscuro ? "claro" : "oscuro"
-    document.documentElement.setAttribute("data-tema", proximo)
-    try {
-      localStorage.setItem("centinela:tema", proximo)
-    } catch {
-      // Modo privado o storage bloqueado: el modo vale para esta pestaña y ya.
-    }
-    setOscuro(!oscuro)
-  }
-
-  return (
-    <button
-      type="button"
-      className="perilla"
-      data-action="tema"
-      aria-pressed={oscuro}
-      onClick={alternar}
-    >
-      <span className="perilla-cuerpo" aria-hidden="true">
-        <span className="perilla-tecla" />
-      </span>
-      <span className="perilla-texto">
-        <span className="solo-claro">Modo claro</span>
-        <span className="solo-oscuro">Modo oscuro</span>
-      </span>
-    </button>
   )
 }
 
@@ -988,7 +973,11 @@ function Carril({
             · {descripcion}
           </p>
         </div>
-        <Lampara tono={activo ? "naranja" : "apagada"} encendida={activo} className="carril-piloto" />
+        <Lampara
+          tono={activo ? "naranja" : "apagada"}
+          encendida={activo}
+          className="carril-piloto"
+        />
       </header>
       {vacio ? (
         <p className="vacio" data-empty={id}>

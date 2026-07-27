@@ -5,18 +5,22 @@ import { useEffect, useRef } from "react"
 /*
  * La mascota del proyecto: el Reflex Agent, en SVG plano.
  *
- * "Sigue la luz del cursor" se lee acá como una lámpara de taller que barre
- * chapa pintada, no como un resplandor: el brillo especular se corre sobre la
- * placa, la sombra propia va al lado opuesto, la sombra de piso se alarga, y
- * la cabeza y las pupilas se orientan a la luz. El mundo esmaltado no emite:
- * refleja.
+ * Recortado en papel y tinta, no en chapa: silueta de tinta llena, huecos de
+ * papel, y un solo punto de luz amarillo en la antena — el mismo punto que
+ * usa toda la página para decir estado.
+ *
+ * "Sigue la luz del cursor" se lee acá como una aguada suave que se corre
+ * sobre la silueta, la sombra de piso que se desplaza al lado opuesto, y la
+ * cabeza y las pupilas que se orientan. Nada de especular ni de relieve.
+ *
+ * El COMPORTAMIENTO no cambió respecto de la versión anterior: es el mismo
+ * lerp de factor fijo por cuadro, sin reloj y sin azar. Lo que cambió es cómo
+ * se ve. El refinamiento propio de la mascota queda pendiente (DESIGN.md).
  *
  * No hay 3D. Ver docs/design/referencias/codigo/21st-spline-scene.tsx: la
  * escena de Spline necesita un .splinecode alojado en su nube, que no se
  * genera desde código. El patrón de lazy + Suspense de esa referencia no hace
  * falta porque esto es un SVG inline de ~2 KB, sin dependencias.
- *
- * Sin reloj y sin azar: el seguimiento es un lerp de factor fijo por cuadro.
  */
 
 export type FaseMascota = "inicio" | "corriendo" | "listo" | "error"
@@ -106,34 +110,16 @@ export function Mascota({ fase, etapa, detalle }: MascotaProps) {
       >
         <title id="mascota-titulo">El Reflex Agent</title>
         <desc id="mascota-desc">
-          Un robot de chapa esmaltada que gira la cabeza hacia la luz del cursor. En el pecho
-          lleva el número de la etapa que estás mirando.
+          Un robot recortado en papel y tinta que gira la cabeza hacia la luz del cursor. En el
+          pecho lleva el número de la etapa que estás mirando, y en la antena el punto de luz que
+          dice en qué anda.
         </desc>
 
         <defs>
-          <linearGradient id="m-esmalte" x1="0" y1="0" x2="0" y2="1">
-            <stop className="m-esmalte-alto" offset="0" />
-            <stop className="m-esmalte-bajo" offset="1" />
-          </linearGradient>
-          <linearGradient id="m-chasis" x1="0" y1="0" x2="0" y2="1">
-            <stop className="m-chasis-alto" offset="0" />
-            <stop className="m-chasis-bajo" offset="1" />
-          </linearGradient>
-          <radialGradient id="m-lente" cx="0.36" cy="0.3" r="0.78">
-            <stop className="m-lente-centro" offset="0" />
-            <stop className="m-lente-medio" offset="0.55" />
-            <stop className="m-lente-borde" offset="1" />
-          </radialGradient>
-          {/* El barrido de la lámpara: reflejo especular con caída suave, y su
-              contrario en el lado en sombra. Sin bordes duros no hay mancha. */}
-          <radialGradient id="m-barrido" cx="0.5" cy="0.5" r="0.5">
-            <stop className="m-barrido-centro" offset="0" />
-            <stop className="m-barrido-medio" offset="0.55" />
-            <stop className="m-barrido-borde" offset="1" />
-          </radialGradient>
-          <radialGradient id="m-penumbra" cx="0.5" cy="0.5" r="0.5">
-            <stop className="m-penumbra-centro" offset="0" />
-            <stop className="m-penumbra-borde" offset="1" />
+          {/* La aguada que se corre con la luz. Sin bordes duros no hay mancha. */}
+          <radialGradient id="m-lavado-g" cx="0.5" cy="0.5" r="0.5">
+            <stop className="m-lavado-centro" offset="0" />
+            <stop className="m-lavado-borde" offset="1" />
           </radialGradient>
           <clipPath id="m-clip-cabeza">
             <rect x="52" y="26" width="136" height="68" rx="18" />
@@ -143,141 +129,76 @@ export function Mascota({ fase, etapa, detalle }: MascotaProps) {
           </clipPath>
         </defs>
 
-        {/* Sombra de piso: se corre al lado opuesto de la luz y se alarga. */}
-        <ellipse className="m-sombra-piso" cx="120" cy="216" rx="80" ry="8" />
+        {/* Sombra de piso: papel hundido, plano. Se corre al lado opuesto. */}
+        <ellipse className="m-sombra-piso" cx="120" cy="216" rx="78" ry="7" />
 
-        {/* Piernas y pies */}
-        <g className="m-patas">
-          <rect x="80" y="182" width="24" height="20" rx="4" />
-          <rect x="136" y="182" width="24" height="20" rx="4" />
-          <rect x="70" y="198" width="46" height="13" rx="4" />
-          <rect x="124" y="198" width="46" height="13" rx="4" />
-        </g>
-
-        {/* Brazos */}
-        <g className="m-brazos">
+        {/* Piernas, pies, brazos y cuello: todo la misma tinta */}
+        <g className="m-cuerpo">
+          <rect x="80" y="182" width="24" height="20" rx="5" />
+          <rect x="136" y="182" width="24" height="20" rx="5" />
+          <rect x="70" y="198" width="46" height="13" rx="6" />
+          <rect x="124" y="198" width="46" height="13" rx="6" />
           <rect x="42" y="112" width="18" height="58" rx="9" />
           <rect x="180" y="112" width="18" height="58" rx="9" />
+          <rect x="106" y="90" width="28" height="14" rx="5" />
         </g>
 
-        {/* Cuello */}
-        <rect className="m-cuello" x="106" y="90" width="28" height="14" rx="4" />
-
-        {/* Torso: la placa esmaltada, con remaches y la ventanilla del pecho */}
+        {/* Torso: silueta de tinta con la ventanilla de papel en el pecho */}
         <g className="m-torso">
-          <rect
-            x="58"
-            y="100"
-            width="124"
-            height="86"
-            rx="16"
-            fill="url(#m-esmalte)"
-            className="m-placa"
-          />
+          <rect className="m-cuerpo" x="58" y="100" width="124" height="86" rx="16" />
           <g clipPath="url(#m-clip-cuerpo)">
             <ellipse
-              className="m-sombra-propia"
-              cx="120"
-              cy="143"
-              rx="92"
-              ry="66"
-              fill="url(#m-penumbra)"
-            />
-            <ellipse
-              className="m-brillo"
+              className="m-lavado"
               cx="120"
               cy="143"
               rx="76"
               ry="56"
-              fill="url(#m-barrido)"
+              fill="url(#m-lavado-g)"
             />
           </g>
-          <rect
-            x="58.5"
-            y="100.5"
-            width="123"
-            height="85"
-            rx="15.5"
-            className="m-canto"
-            fill="none"
-          />
-          <g className="m-remaches">
-            <circle cx="70" cy="112" r="3" />
-            <circle cx="170" cy="112" r="3" />
-            <circle cx="70" cy="174" r="3" />
-            <circle cx="170" cy="174" r="3" />
-          </g>
-          <rect className="m-ventana" x="86" y="118" width="68" height="44" rx="7" />
+          <rect className="m-hueco" x="86" y="118" width="68" height="44" rx="8" />
           <text className="m-numero" x="120" y="147" textAnchor="middle">
             {numero}
           </text>
-          <rect className="m-franja" x="86" y="168" width="68" height="6" rx="3" />
+          <rect className="m-hueco" x="86" y="170" width="68" height="4" rx="2" />
         </g>
 
         {/* Cabeza: gira un poco hacia la luz */}
         <g className="m-cabeza">
-          <rect className="m-antena-vara" x="117.5" y="14" width="5" height="16" rx="2.5" />
-          <g className="m-antena">
-            <circle className="m-antena-sombra" cx="120" cy="11" r="8" />
-            <circle className="m-antena-lente" cx="120" cy="9.5" r="7.5" fill="url(#m-lente)" />
-            <circle className="m-antena-aro" cx="120" cy="9.5" r="7.5" fill="none" />
+          <rect className="m-cuerpo" x="117.5" y="14" width="5" height="16" rx="2.5" />
+          {/* La antena es el punto de luz del robot: el único amarillo acá. */}
+          <circle className="m-antena-lente" cx="120" cy="9.5" r="7" />
+          <circle className="m-antena-aro" cx="120" cy="9.5" r="7" />
+
+          <g className="m-cuerpo">
+            <rect x="42" y="48" width="12" height="24" rx="4" />
+            <rect x="186" y="48" width="12" height="24" rx="4" />
+            <rect x="52" y="26" width="136" height="68" rx="18" />
           </g>
-
-          <rect className="m-oreja" x="42" y="48" width="12" height="24" rx="3" />
-          <rect className="m-oreja" x="186" y="48" width="12" height="24" rx="3" />
-
-          <rect
-            x="52"
-            y="26"
-            width="136"
-            height="68"
-            rx="18"
-            fill="url(#m-chasis)"
-            className="m-placa"
-          />
           <g clipPath="url(#m-clip-cabeza)">
             <ellipse
-              className="m-sombra-propia"
-              cx="120"
-              cy="60"
-              rx="98"
-              ry="56"
-              fill="url(#m-penumbra)"
-            />
-            <ellipse
-              className="m-brillo"
+              className="m-lavado"
               cx="120"
               cy="60"
               rx="82"
               ry="48"
-              fill="url(#m-barrido)"
+              fill="url(#m-lavado-g)"
             />
           </g>
-          <rect
-            x="52.5"
-            y="26.5"
-            width="135"
-            height="67"
-            rx="17.5"
-            className="m-canto"
-            fill="none"
-          />
 
-          <rect className="m-visor" x="62" y="38" width="116" height="44" rx="13" />
+          {/* Visor: una banda de papel recortada en la tinta */}
+          <rect className="m-hueco" x="62" y="38" width="116" height="44" rx="14" />
 
           <g className="m-ojos">
-            <circle className="m-ojo-lente" cx="97" cy="60" r="13.5" fill="url(#m-lente)" />
-            <circle className="m-ojo-aro" cx="97" cy="60" r="13.5" fill="none" />
-            <circle className="m-ojo-lente" cx="143" cy="60" r="13.5" fill="url(#m-lente)" />
-            <circle className="m-ojo-aro" cx="143" cy="60" r="13.5" fill="none" />
             <g className="m-pupilas">
-              <circle cx="97" cy="60" r="5.4" />
-              <circle cx="143" cy="60" r="5.4" />
+              <circle cx="97" cy="60" r="9" />
+              <circle cx="143" cy="60" r="9" />
             </g>
-            {/* Párpados: bajan cuando el agente todavía no arrancó. */}
+            {/* Párpados: bajan cuando el agente todavía no arrancó. Son del
+                color del visor, así que "cierran" comiéndose la pupila. */}
             <g className="m-parpados">
-              <rect x="83" y="46.5" width="28" height="10" rx="4" />
-              <rect x="129" y="46.5" width="28" height="10" rx="4" />
+              <rect x="85" y="41" width="24" height="17" rx="6" />
+              <rect x="131" y="41" width="24" height="17" rx="6" />
             </g>
           </g>
         </g>

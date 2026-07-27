@@ -35,3 +35,6 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Fotos de verificación (se regeneran con docs/design/mirar.mjs)
+docs/design/fotos/
