@@ -2261,9 +2261,13 @@ export async function execute(
 
   const post = async (url: string, init: RequestInit): Promise<ExecutionResult> => {
     const response = await fetchImpl(url, init)
+    // Solo el host, NUNCA la URL completa: el path es donde vive el secreto.
+    // Un webhook de Discord resuelto es una credencial portadora, y `detail`
+    // se renderiza en el dashboard público.
+    const host = hostOf(url)
     return response.ok
-      ? { ok: true, detail: `POST ${url} → ${response.status}` }
-      : { ok: false, detail: `POST ${url} falló con ${response.status}` }
+      ? { ok: true, detail: `POST ${host} → ${response.status}` }
+      : { ok: false, detail: `POST ${host} falló con ${response.status}` }
   }
 
   switch (action.type) {

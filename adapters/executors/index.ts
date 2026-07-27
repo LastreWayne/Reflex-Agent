@@ -18,29 +18,41 @@ export type FetchImpl = (
 ) => Promise<{ ok: boolean; status: number }>
 
 /**
+ * Extrae sólo el host de una URL — nunca el path, que es donde vive el
+ * secreto (el token de un webhook de Discord, el ID de un topic privado de
+ * ntfy, etc.). Si la URL está mal formada, `new URL` tira: no dejamos que
+ * eso tumbe el executor, y el fallback NO repite el string original — un
+ * typo en la config también podría llevar un secreto pegado.
+ */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return "host desconocido"
+  }
+}
+
+/**
  * Único lugar del módulo que toca la red. Recibe la petición ya armada por
  * el canal correspondiente y reporta el resultado.
  *
- * El `detail` describe la acción por su descripción pública (la del config
- * de dominio), nunca por la URL o el token ya resueltos: un secreto que
- * entra acá no debe poder salir en ningún resultado ni error. Si `fetchImpl`
- * tira una excepción (p. ej. un error de red cuyo mensaje podría incluir la
- * URL), se atrapa y se reporta un detalle genérico.
+ * El `detail` lleva el host contactado y el status code — útil para
+ * depurar desde el dashboard — pero nunca el path, que es donde vive el
+ * secreto ya resuelto. Si `fetchImpl` tira una excepción (p. ej. un error
+ * de red cuyo mensaje podría incluir la URL completa), se atrapa y jamás
+ * se propaga su contenido.
  */
-async function post(
-  action: Action,
-  build: BuildResult,
-  fetchImpl: FetchImpl,
-): Promise<ExecutionResult> {
+async function post(build: BuildResult, fetchImpl: FetchImpl): Promise<ExecutionResult> {
   if (!build.ok) return { ok: false, detail: `Falta la variable ${build.missing}` }
 
+  const host = hostOf(build.request.url)
   try {
     const response = await fetchImpl(build.request.url, build.request.init)
     return response.ok
-      ? { ok: true, detail: `${action.description} — enviado (${response.status})` }
-      : { ok: false, detail: `${action.description} — falló con ${response.status}` }
+      ? { ok: true, detail: `POST ${host} → ${response.status}` }
+      : { ok: false, detail: `POST ${host} falló con ${response.status}` }
   } catch {
-    return { ok: false, detail: `${action.description} — no se pudo enviar` }
+    return { ok: false, detail: `POST ${host} no se pudo enviar` }
   }
 }
 
@@ -61,19 +73,15 @@ export async function execute(
       return executeStateMutation(config, detection)
 
     case "discord":
-      return post(action, buildDiscordRequest(config, action.config, decision, detection), fetchImpl)
+      return post(buildDiscordRequest(config, action.config, decision, detection), fetchImpl)
 
     case "ntfy":
-      return post(action, buildNtfyRequest(config, action.config, decision, detection), fetchImpl)
+      return post(buildNtfyRequest(config, action.config, decision, detection), fetchImpl)
 
     case "webhook":
-      return post(action, buildWebhookRequest(config, action.config, decision, detection), fetchImpl)
+      return post(buildWebhookRequest(config, action.config, decision, detection), fetchImpl)
 
     case "github_issue":
-      return post(
-        action,
-        buildGithubIssueRequest(config, action.config, decision, detection),
-        fetchImpl,
-      )
+      return post(buildGithubIssueRequest(config, action.config, decision, detection), fetchImpl)
   }
 }

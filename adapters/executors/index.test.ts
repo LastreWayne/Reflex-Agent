@@ -104,46 +104,63 @@ describe("execute", () => {
     expect(result.detail).toContain("500")
   })
 
-  // --- No leak: un secreto resuelto no puede aparecer en ningún resultado ---
+  // --- No leak: el detail lleva el host (útil para depurar) pero nunca el
+  // --- path, que es donde vive el secreto ya resuelto (token, ID privado).
 
-  it("no filtra la URL resuelta en el detail cuando el POST tiene éxito", async () => {
+  const SECRET_PATH = "T00/B11/MUY-SECRETO-9F3K"
+  const SECRET_URL = `https://hooks.example.com/${SECRET_PATH}`
+
+  it("el detail muestra el host pero no el path (el secreto) cuando el POST tiene éxito", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 204 })
     const result = await execute(
       action({ type: "webhook", config: { url: "env:URL" } }),
       decision,
       detection,
-      { URL: "https://secreto.example.com/muy-privado" },
+      { URL: SECRET_URL },
       fetchImpl,
     )
     expect(result.ok).toBe(true)
-    expect(result.detail).not.toContain("secreto.example.com")
+    expect(result.detail).toContain("hooks.example.com")
+    expect(result.detail).not.toContain(SECRET_PATH)
   })
 
-  it("no filtra la URL resuelta en el detail cuando el POST falla", async () => {
+  it("el detail muestra el host pero no el path (el secreto) cuando el POST falla", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 500 })
     const result = await execute(
       action({ type: "webhook", config: { url: "env:URL" } }),
       decision,
       detection,
-      { URL: "https://secreto.example.com/muy-privado" },
+      { URL: SECRET_URL },
       fetchImpl,
     )
-    expect(result.detail).not.toContain("secreto.example.com")
+    expect(result.detail).toContain("hooks.example.com")
+    expect(result.detail).not.toContain(SECRET_PATH)
   })
 
-  it("no filtra el secreto si fetchImpl tira una excepción", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockRejectedValue(new Error("fetch failed: https://secreto.example.com/muy-privado"))
+  it("no filtra el secreto si fetchImpl tira una excepción cuyo mensaje incluye la URL completa", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error(`fetch failed: ${SECRET_URL}`))
     const result = await execute(
       action({ type: "webhook", config: { url: "env:URL" } }),
       decision,
       detection,
-      { URL: "https://secreto.example.com/muy-privado" },
+      { URL: SECRET_URL },
       fetchImpl,
     )
     expect(result.ok).toBe(false)
-    expect(result.detail).not.toContain("secreto.example.com")
+    expect(result.detail).not.toContain(SECRET_PATH)
+  })
+
+  it("reporta un detail seguro cuando la URL configurada está mal formada", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200 })
+    const result = await execute(
+      action({ type: "webhook", config: { url: "env:URL" } }),
+      decision,
+      detection,
+      { URL: "no-es-una-url-valida" },
+      fetchImpl,
+    )
+    expect(result.ok).toBe(true)
+    expect(result.detail).not.toContain("no-es-una-url-valida")
   })
 
   // --- github_issue: sin cobertura en el set anterior, se prueba aparte ---
