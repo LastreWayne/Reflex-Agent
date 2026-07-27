@@ -25,7 +25,7 @@
 ```
 /engine
   schema.ts            Zod + tipos derivados. Nadie define tipos de dominio fuera de acá.
-  normalizer.ts        entrada cruda → NormalizedEvent[] validado y ordenado
+  normalizer.ts        entrada cruda → { events ordenados, errors por entrada descartada }
   intervals.ts         NormalizedEvent[] → Interval[]
   detector.ts          orquesta los evaluadores + supresión (dedup y cooldown)
   rules/
@@ -308,6 +308,22 @@ export interface Detection {
   cooldownKey: string
 }
 
+export interface NormalizeError {
+  /** Posición en el array crudo, antes de ordenar. */
+  index: number
+  /** `null` cuando la entrada no traía un entityId usable. */
+  entityId: string | null
+  /** Campos que fallaron. Vacío si la entrada entera es inválida (no era un objeto). */
+  fields: string[]
+  /** Mensaje legible, listo para mostrar. */
+  message: string
+}
+
+export interface NormalizeResult {
+  events: NormalizedEvent[]
+  errors: NormalizeError[]
+}
+
 export interface Decision {
   actionId: string
   reason: string
@@ -342,8 +358,10 @@ git commit -m "feat(engine): contrato de datos con Zod"
 - Test: `engine/normalizer.test.ts`
 
 **Interfaces:**
-- Consumes: `NormalizedEventSchema`, `NormalizedEvent` de `engine/schema.ts`.
-- Produces: `normalize(raw: unknown[]): NormalizedEvent[]` — valida cada entrada y devuelve la lista **ordenada ascendente por timestamp**. Lanza `ZodError` si alguna entrada es inválida.
+- Consumes: `NormalizedEventSchema`, `NormalizedEvent`, `NormalizeError`, `NormalizeResult` de `engine/schema.ts`.
+- Produces: `normalize(raw: unknown[]): NormalizeResult` — valida cada entrada **por separado** y devuelve `{ events, errors }`: los válidos **ordenados ascendente por timestamp**, más un `NormalizeError` por cada entrada descartada. **No lanza.**
+
+> **Contrato revisado el 2026-07-26**, después de que la Task 2 shipeara. El original era `normalize(raw): NormalizedEvent[]` y lanzaba `ZodError` en la primera entrada inválida — una entrada mala descartaba el lote entero. Como `normalize()` es la costura de integración con OCPP para el uso real en VOLT (donde un cargador con firmware viejo no puede tumbar el lote), pasó a tolerante-con-reporte. Los bloques de código de abajo reflejan lo shipeado.
 
 Fuera de alcance: mapeo de campos configurable para webhooks de terceros. Hoy la entrada ya viene con la forma del schema; el mapeo entra después sin tocar a los consumidores.
 
@@ -357,26 +375,45 @@ import { normalize } from "./normalizer.js"
 
 describe("normalize", () => {
   it("ordena los eventos por timestamp ascendente", () => {
-    const result = normalize([
+    const { events } = normalize([
       { entityId: "A", timestamp: "2026-07-25T10:05:00.000Z", state: "Charging" },
       { entityId: "A", timestamp: "2026-07-25T10:00:00.000Z", state: "Available" },
     ])
-    expect(result.map((e) => e.state)).toEqual(["Available", "Charging"])
+    expect(events.map((e) => e.state)).toEqual(["Available", "Charging"])
   })
 
   it("conserva la metadata", () => {
-    const result = normalize([
+    const { events } = normalize([
       { entityId: "A", timestamp: "2026-07-25T10:00:00.000Z", state: "Charging", metadata: { zone: "norte" } },
     ])
-    expect(result[0]!.metadata).toEqual({ zone: "norte" })
+    expect(events[0]!.metadata).toEqual({ zone: "norte" })
   })
 
-  it("lanza si un evento es inválido", () => {
-    expect(() => normalize([{ entityId: "A", state: "Charging" }])).toThrow()
+  it("devuelve ambas listas vacías para entrada vacía", () => {
+    expect(normalize([])).toEqual({ events: [], errors: [] })
   })
 
-  it("devuelve lista vacía para entrada vacía", () => {
-    expect(normalize([])).toEqual([])
+  it("descarta las entradas inválidas y devuelve el resto", () => {
+    const { events, errors } = normalize([
+      { entityId: "EVC-02", timestamp: "2026-07-25T10:05:00.000Z", state: "Charging" },
+      { entityId: "EVC-09", timestamp: "ayer por la tarde", state: "Faulted" },
+      { entityId: "EVC-01", timestamp: "2026-07-25T10:00:00.000Z", state: "Available" },
+    ])
+
+    expect(events.map((e) => e.entityId)).toEqual(["EVC-01", "EVC-02"])
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatchObject({
+      index: 1,
+      entityId: "EVC-09",
+      fields: ["timestamp"],
+    })
+  })
+
+  it("deja entityId en null y fields vacío si la entrada no es un objeto", () => {
+    const { events, errors } = normalize(["esto no es un evento"])
+
+    expect(events).toEqual([])
+    expect(errors[0]).toMatchObject({ index: 0, entityId: null, fields: [] })
   })
 })
 ```
@@ -391,12 +428,43 @@ Expected: FAIL — no existe `engine/normalizer.ts`.
 `engine/normalizer.ts`:
 
 ```ts
-import { NormalizedEventSchema, type NormalizedEvent } from "./schema.js"
+import { z } from "zod"
+import {
+  NormalizedEventSchema,
+  type NormalizedEvent,
+  type NormalizeError,
+  type NormalizeResult,
+} from "./schema.js"
 
-export function normalize(raw: unknown[]): NormalizedEvent[] {
-  return raw
-    .map((entry) => NormalizedEventSchema.parse(entry))
-    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+const EntityIdProbe = z.object({ entityId: z.string().min(1) })
+
+export function normalize(raw: unknown[]): NormalizeResult {
+  const events: NormalizedEvent[] = []
+  const errors: NormalizeError[] = []
+
+  for (const [index, entry] of raw.entries()) {
+    const result = NormalizedEventSchema.safeParse(entry)
+
+    if (result.success) {
+      events.push(result.data)
+      continue
+    }
+
+    const probe = EntityIdProbe.safeParse(entry)
+
+    errors.push({
+      index,
+      entityId: probe.success ? probe.data.entityId : null,
+      fields: result.error.issues
+        .map((issue) => issue.path.join("."))
+        .filter((path) => path !== ""),
+      message: z.prettifyError(result.error),
+    })
+  }
+
+  events.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+
+  return { events, errors }
 }
 ```
 
@@ -1466,7 +1534,7 @@ Expected: PASS, 8 tests.
 import { describe, expect, it } from "vitest"
 import { detect } from "./detector.js"
 import { normalize } from "./normalizer.js"
-import { DomainConfigSchema, type NormalizedEvent } from "./schema.js"
+import { DomainConfigSchema } from "./schema.js"
 import voltRaw from "../configs/volt.json" with { type: "json" }
 import restaurantRaw from "../configs/restaurant.json" with { type: "json" }
 
@@ -1480,7 +1548,7 @@ describe("el mismo motor sobre dos dominios distintos", () => {
 
   it("detecta una estación atascada en falla usando la config de VOLT", () => {
     const config = DomainConfigSchema.parse(voltRaw)
-    const events = normalize([
+    const { events } = normalize([
       { entityId: "EVC-04", timestamp: "2026-07-25T19:30:00.000Z", state: "Available", metadata: { zone: "norte" } },
       { entityId: "EVC-04", timestamp: "2026-07-25T19:45:00.000Z", state: "Faulted", metadata: { zone: "norte" } },
     ] satisfies unknown[])
@@ -1491,7 +1559,7 @@ describe("el mismo motor sobre dos dominios distintos", () => {
 
   it("detecta un no-show usando la config del restaurante — misma función", () => {
     const config = DomainConfigSchema.parse(restaurantRaw)
-    const events = normalize([
+    const { events } = normalize([
       { entityId: "mesa-7", timestamp: "2026-07-25T19:00:00.000Z", state: "Libre" },
       { entityId: "mesa-7", timestamp: "2026-07-25T19:40:00.000Z", state: "Reservada" },
     ] satisfies unknown[])
@@ -1503,7 +1571,7 @@ describe("el mismo motor sobre dos dominios distintos", () => {
   it("cada config solo dispara sus propias reglas", () => {
     const volt = DomainConfigSchema.parse(voltRaw)
     const restaurant = DomainConfigSchema.parse(restaurantRaw)
-    const events: NormalizedEvent[] = normalize([
+    const { events } = normalize([
       { entityId: "mesa-7", timestamp: "2026-07-25T19:40:00.000Z", state: "Reservada" },
     ] satisfies unknown[])
 

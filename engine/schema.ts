@@ -100,6 +100,18 @@ export interface Detection {
   cooldownKey: string
 }
 
+export interface NormalizeError {
+  index: number
+  entityId: string | null
+  fields: string[]
+  message: string
+}
+
+export interface NormalizeResult {
+  events: NormalizedEvent[]
+  errors: NormalizeError[]
+}
+
 export interface Decision {
   actionId: string
   reason: string
