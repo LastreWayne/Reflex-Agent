@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { createClaudeDecider } from "../../../adapters/decider/claude.js"
 import type { Decider } from "../../../engine/schema.js"
-import { CONFIGS, DecideBodySchema } from "../../domains.js"
+import { CONFIGS, DecideBodySchema, DeliberationSchema } from "../../domains.js"
 
 /** El SDK de Anthropic y la clave viven en el servidor. Nunca en el bundle. */
 export const runtime = "nodejs"
@@ -37,8 +37,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const decision = await decider(detection, config)
-    return Response.json({ decision })
+    const verdict = await decider(detection, config)
+    // El tope se aplica acá: es donde la salida del modelo entra al sistema.
+    // Una deliberación fuera de cotas es un fallo del modelo (502), no un
+    // deploy mal armado (500).
+    const deliberation = DeliberationSchema.parse(verdict.deliberation)
+    return Response.json({ decision: verdict.decision, deliberation })
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 502 })
   }

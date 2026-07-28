@@ -168,7 +168,18 @@ describe("POST /api/decide", () => {
 
   it("no acepta un config mandado por el navegador — resuelve el suyo", async () => {
     create.mockResolvedValue({
-      content: [{ type: "tool_use", name: "ignore", input: { reason: "r", message: "m" } }],
+      content: [
+        {
+          type: "tool_use",
+          name: "ignore",
+          input: {
+            reason: "r",
+            message: "m",
+            rejected: { "alert-ops": "no amerita", "create-ticket": "no amerita" },
+            wouldChangeIf: "n/a",
+          },
+        },
+      ],
       stop_reason: "tool_use",
     })
     const response = await decide(
@@ -207,7 +218,16 @@ describe("POST /api/decide", () => {
   it("devuelve la decisión cuando el modelo elige una acción", async () => {
     create.mockResolvedValue({
       content: [
-        { type: "tool_use", name: "alert-ops", input: { reason: "urgente", message: "revisar" } },
+        {
+          type: "tool_use",
+          name: "alert-ops",
+          input: {
+            reason: "urgente",
+            message: "revisar",
+            rejected: { "create-ticket": "no aplica", ignore: "no aplica" },
+            wouldChangeIf: "si bajara la severidad",
+          },
+        },
       ],
       stop_reason: "tool_use",
     })
@@ -215,6 +235,13 @@ describe("POST /api/decide", () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       decision: { actionId: "alert-ops", reason: "urgente", message: "revisar" },
+      deliberation: {
+        rejected: [
+          { actionId: "create-ticket", reason: "no aplica" },
+          { actionId: "ignore", reason: "no aplica" },
+        ],
+        wouldChangeIf: "si bajara la severidad",
+      },
     })
   })
 
@@ -240,5 +267,56 @@ describe("POST /api/decide", () => {
     const request = create.mock.calls[0]?.[0] as Record<string, unknown>
     expect(request.model).toBe("claude-opus-5")
     expect(request.speed).toBe("fast")
+  })
+
+  it("responde la decisión y la deliberación por separado", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test")
+    create.mockResolvedValue({
+      stop_reason: "tool_use",
+      content: [
+        {
+          type: "tool_use",
+          name: "alert-ops",
+          input: {
+            message: "La estación EVC-01 no responde.",
+            reason: "Sin heartbeat.",
+            rejected: {
+              "create-ticket": "Un ticket llega tarde.",
+              ignore: "No se puede ignorar una estación muda.",
+            },
+            wouldChangeIf: "Si hubiera reportado hace un minuto, ignoraba.",
+          },
+        },
+      ],
+    })
+
+    const response = await decide(post({ domain: "volt", detection }))
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.decision.actionId).toBe("alert-ops")
+    expect(body.deliberation.rejected).toHaveLength(2)
+    expect(body.deliberation.wouldChangeIf).toBe("Si hubiera reportado hace un minuto, ignoraba.")
+  })
+
+  it("devuelve 502 si el modelo produce una deliberación fuera de las cotas", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test")
+    create.mockResolvedValue({
+      stop_reason: "tool_use",
+      content: [
+        {
+          type: "tool_use",
+          name: "alert-ops",
+          input: {
+            message: "ok",
+            reason: "ok",
+            rejected: { "create-ticket": "x".repeat(501), ignore: "ok" },
+            wouldChangeIf: "ok",
+          },
+        },
+      ],
+    })
+
+    const response = await decide(post({ domain: "volt", detection }))
+    expect(response.status).toBe(502)
   })
 })
