@@ -85,6 +85,21 @@ describe("buildPrompt", () => {
     expect(user).toContain("EVC-04")
     expect(user).toContain("720000")
   })
+
+  it("cerca la evidencia entre delimitadores", () => {
+    const { user } = buildPrompt(detection, config)
+    const abre = user.indexOf("<evidencia>")
+    const cierra = user.indexOf("</evidencia>")
+    expect(abre).toBeGreaterThan(-1)
+    expect(cierra).toBeGreaterThan(abre)
+    expect(user.slice(abre, cierra)).toContain("720000")
+  })
+
+  it("el system declara que lo cercado es dato y no instrucciones", () => {
+    const { system } = buildPrompt(detection, config)
+    expect(system).toContain("<evidencia>")
+    expect(system).toMatch(/nunca instrucciones/i)
+  })
 })
 
 describe("buildTools — restaurant", () => {
