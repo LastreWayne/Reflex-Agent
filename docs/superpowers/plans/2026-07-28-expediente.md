@@ -1105,7 +1105,9 @@ curl -s -X POST http://localhost:3000/api/decide \
 
 **Si responde 400/502 con un error de la API sobre el schema de la tool:** aplicar el fallback del Step 4.
 
-**Además, mirar la CALIDAD de los rechazos** (es el riesgo #2 del spec): ¿dicen algo concreto sobre esta detección, o son frases genéricas que servirían para cualquier caso? Anotar el veredicto. Si son de relleno, la salida es subir `effort` de `"low"` a `"medium"` en `claude.ts:43` — **un parámetro, no un rediseño**, y sólo con esta evidencia en la mano.
+**Además, mirar la CALIDAD de los rechazos** (es el riesgo #2 del spec): ¿dicen algo concreto sobre esta detección, o son frases genéricas que servirían para cualquier caso? **Anotar el veredicto en el ledger y NO tocar nada.**
+
+> **Ruling del humano (2026-07-28, pre-flight):** manda el Global Constraint. `output_config: { effort: "low" }` **no se toca dentro de este plan**. Esta task sólo MIDE. Si los rechazos salen de relleno, queda anotado y se decide después, fuera de este plan. Subir `effort` acá encarecería cada decisión del playground público en medio de una ejecución.
 
 - [ ] **Step 4: Fallback — aplanar el schema (SÓLO si el Step 3 falló)**
 
@@ -2129,12 +2131,15 @@ http://localhost:3000/?domain=volt&seed=42&force=1
 - [ ] Los rechazos dicen algo concreto sobre ESTA detección, no frases que servirían para cualquier caso.
 - [ ] El contrafáctico nombra un número real de la evidencia.
 
-Si los rechazos salen genéricos, subir `output_config.effort` de `"low"` a `"medium"` en `claude.ts:43` — **con esta evidencia en la mano, no antes**.
+Si los rechazos salen genéricos: **anotarlo en el ledger y no tocar `effort`.** Ver el ruling en la Task 7 — el Global Constraint manda dentro de este plan.
 
 - [ ] **Step 4: Commit**
 
+Sólo si quedó algo sin commitear. `git add -A` no: nombrar los archivos, para que un `.env.local` o un artefacto suelto no entre por descuido.
+
 ```bash
-git add -A
+git status --short          # mirar QUÉ hay antes de agregar nada
+git add <los archivos que correspondan>
 git commit -m "chore: verificacion final del expediente"
 ```
 
