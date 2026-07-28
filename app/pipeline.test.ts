@@ -375,6 +375,13 @@ describe("buildFunnel", () => {
     expect(f.delivered).toBeLessThanOrEqual(1)
     expect(f.overCap).toBe(snap.classified.filter((c) => c.status === "fuera-de-cupo").length)
   })
+
+  it("cuenta las silenciadas contra el estado real, no contra el total", () => {
+    const snap = buildRun({ ...DEFAULT_PARAMS, forceIncident: true })
+    const f = buildFunnel(snap)
+    expect(f.silenced).toBe(snap.classified.filter((c) => c.status === "suprimida").length)
+    expect(f.delivered).toBe(snap.classified.filter((c) => c.status === "pasa").length)
+  })
 })
 
 describe("buildBallot", () => {
@@ -420,5 +427,22 @@ describe("buildBallot", () => {
     expect(filas).toHaveLength(config.actions.length)
     expect(filas.every((r) => r.status === "sin-resolver")).toBe(true)
     expect(filas.every((r) => r.reason === null)).toBe(true)
+    expect(filas.every((r) => r.message === null)).toBe(true)
+  })
+
+  it("una acción sin rechazo registrado igual sale como descartada, sin motivo", () => {
+    const incompleto = {
+      decision: verdict.decision,
+      deliberation: {
+        // Falta el rechazo de `alert-ops` a propósito: el decisor real siempre
+        // los manda todos, pero la boleta no puede confiar en datos que no produce.
+        rejected: [{ actionId: "ignore", reason: "conviene que quede anotado" }],
+        wouldChangeIf: verdict.deliberation.wouldChangeIf,
+      },
+    }
+    const fila = buildBallot(config, incompleto).find((r) => r.actionId === "alert-ops")!
+    expect(fila.status).toBe("descartada")
+    expect(fila.reason).toBeNull()
+    expect(fila.message).toBeNull()
   })
 })
