@@ -1229,6 +1229,20 @@ describe("buildFunnel", () => {
     expect(f.delivered).toBeLessThanOrEqual(1)
     expect(f.overCap).toBe(snap.classified.filter((c) => c.status === "fuera-de-cupo").length)
   })
+
+  /*
+   * El test de la suma NO alcanza y por poco: como los tres contadores salen
+   * de un mismo if/else exhaustivo sobre una unión cerrada de tres literales,
+   * `silenced + overCap + delivered === detections` se cumple por construcción
+   * para CUALQUIER partición, correcta o no. Intercambiar dos ramas lo deja
+   * verde. `silenced` es justo el número que el spec pide no tergiversar.
+   */
+  it("cuenta las silenciadas contra el estado real, no contra el total", () => {
+    const snap = buildRun({ ...DEFAULT_PARAMS, forceIncident: true })
+    const f = buildFunnel(snap)
+    expect(f.silenced).toBe(snap.classified.filter((c) => c.status === "suprimida").length)
+    expect(f.delivered).toBe(snap.classified.filter((c) => c.status === "pasa").length)
+  })
 })
 
 describe("buildBallot", () => {
@@ -1274,6 +1288,26 @@ describe("buildBallot", () => {
     expect(filas).toHaveLength(config.actions.length)
     expect(filas.every((r) => r.status === "sin-resolver")).toBe(true)
     expect(filas.every((r) => r.reason === null)).toBe(true)
+    expect(filas.every((r) => r.message === null)).toBe(true)
+  })
+
+  /*
+   * `buildBallot` recibe datos que no produjo. El decisor real garantiza un
+   * rechazo por cada acción no elegida, pero la boleta no puede confiar en eso:
+   * un refactor a `.find(...)!` shipearía un crash sin que nada lo delate.
+   */
+  it("una acción sin rechazo registrado igual sale como descartada, sin motivo", () => {
+    const incompleto = {
+      decision: verdict.decision,
+      deliberation: {
+        rejected: [{ actionId: "ignore", reason: "conviene que quede anotado" }],
+        wouldChangeIf: verdict.deliberation.wouldChangeIf,
+      },
+    }
+    const fila = buildBallot(config, incompleto).find((r) => r.actionId === "alert-ops")!
+    expect(fila.status).toBe("descartada")
+    expect(fila.reason).toBeNull()
+    expect(fila.message).toBeNull()
   })
 })
 ```
