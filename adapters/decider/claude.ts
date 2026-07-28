@@ -1,8 +1,37 @@
 import Anthropic from "@anthropic-ai/sdk"
-import type { Decider } from "../../engine/schema.js"
+import type { Decider, DomainConfig } from "../../engine/schema.js"
 import { buildPrompt, buildTools } from "./prompt.js"
 
 export class DeciderError extends Error {}
+
+/**
+ * El objeto `rejected` que devolvió el modelo → array en el orden de
+ * `config.actions`, salteando la elegida.
+ *
+ * El orden lo fija el CONFIG y no el objeto recibido: la boleta tiene que
+ * verse igual en todas las corridas, y el orden de las claves de un objeto
+ * JSON no es algo sobre lo que valga la pena confiar.
+ */
+function normalizeRejected(
+  raw: unknown,
+  chosenId: string,
+  config: DomainConfig,
+): { actionId: string; reason: string }[] {
+  if (raw === null || typeof raw !== "object") {
+    throw new DeciderError("La tool devolvió `rejected` con una forma inesperada")
+  }
+  const porId = raw as Record<string, unknown>
+
+  return config.actions
+    .filter((a) => a.id !== chosenId)
+    .map((a) => {
+      const reason = porId[a.id]
+      if (typeof reason !== "string") {
+        throw new DeciderError(`La tool no explicó por qué descartó "${a.id}"`)
+      }
+      return { actionId: a.id, reason }
+    })
+}
 
 // speed: "fast" solo existe en estos modelos; con cualquier otro, la API
 // devuelve error. Ver constraint en el brief de la Task 9b.
@@ -49,11 +78,26 @@ export function createClaudeDecider(opts: ClaudeDeciderOptions): Decider {
 
     for (const block of response.content) {
       if (block.type === "tool_use") {
-        const input = block.input as { message?: unknown; reason?: unknown }
-        if (typeof input.message !== "string" || typeof input.reason !== "string") {
+        const input = block.input as {
+          message?: unknown
+          reason?: unknown
+          rejected?: unknown
+          wouldChangeIf?: unknown
+        }
+        if (
+          typeof input.message !== "string" ||
+          typeof input.reason !== "string" ||
+          typeof input.wouldChangeIf !== "string"
+        ) {
           throw new DeciderError(`La tool ${block.name} devolvió un input con forma inesperada`)
         }
-        return { actionId: block.name, reason: input.reason, message: input.message }
+        return {
+          decision: { actionId: block.name, reason: input.reason, message: input.message },
+          deliberation: {
+            rejected: normalizeRejected(input.rejected, block.name, config),
+            wouldChangeIf: input.wouldChangeIf,
+          },
+        }
       }
     }
 
