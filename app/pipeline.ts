@@ -10,6 +10,7 @@ import type {
   Interval,
   NormalizedEvent,
   Severity,
+  Verdict,
 } from "../engine/schema.js"
 import { simulateRestaurant } from "../simulators/restaurant.js"
 import { simulateVolt } from "../simulators/volt-ocpp.js"
@@ -236,52 +237,172 @@ export function buildRun(params: DemoParams): RunSnapshot {
 }
 
 /**
- * Decisiones pregrabadas para `?offline=1`.
+ * Veredictos pregrabados para `?offline=1`.
  *
  * Es el seguro de la demo: sin wifi, con la API caída o con rate limit, el
- * pipeline llega igual hasta el final. El juicio (qué acción) está grabado;
- * `{entidad}` se reemplaza por el id concreto para que la tarjeta no mienta
- * sobre a quién se refiere. El sustantivo del dominio va en el texto de cada
- * plantilla, que ya es por dominio.
+ * pipeline llega igual hasta el final. El juicio está grabado; `{entidad}` se
+ * reemplaza por el id concreto para que la tarjeta no mienta sobre a quién se
+ * refiere.
+ *
+ * Llevan deliberación completa a propósito: la escena offline tiene que ser
+ * IDÉNTICA a la del modo en vivo. Una escena degradada no es un seguro.
+ * El orden de `rejected` es el de `config.actions` menos la elegida — el
+ * mismo que produce `normalizeRejected` en el decisor real.
  */
-export const OFFLINE_DECISIONS: Record<string, Decision> = {
+export const OFFLINE_VERDICTS: Record<string, Verdict> = {
   "volt:faulted-stuck": {
-    actionId: "alert-ops",
-    reason: "Falla persistente en una estación: pierde ingreso y deja conductores varados.",
-    message:
-      "La estación {entidad} lleva más de 10 minutos en Faulted y no se recupera sola. Hay que despachar un técnico.",
+    decision: {
+      actionId: "alert-ops",
+      reason: "Falla persistente en una estación: pierde ingreso y deja conductores varados.",
+      message:
+        "La estación {entidad} lleva más de 10 minutos en Faulted y no se recupera sola. Hay que despachar un técnico.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "create-ticket",
+          reason: "Un ticket entra a una cola; acá hay conductores esperando ahora.",
+        },
+        {
+          actionId: "ignore",
+          reason: "Una falla que ya lleva diez minutos no se destraba sola.",
+        },
+      ],
+      wouldChangeIf:
+        "Si la estación hubiera salido de Faulted antes de los 10 minutos, no alertaba a nadie.",
+    },
   },
+
   "volt:offline": {
-    actionId: "alert-ops",
-    reason: "Sin heartbeat: no sabemos si está cargando, caída o vandalizada.",
-    message: "La estación {entidad} dejó de reportar. Nadie sabe en qué estado quedó.",
+    decision: {
+      actionId: "alert-ops",
+      reason: "Sin heartbeat: no sabemos si está cargando, caída o vandalizada.",
+      message: "La estación {entidad} dejó de reportar. Nadie sabe en qué estado quedó.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "create-ticket",
+          reason: "Todavía no sabemos qué arreglar: primero hay que mirar si respondió.",
+        },
+        {
+          actionId: "ignore",
+          reason: "Una estación muda puede estar cobrando sin cargar, o no estar.",
+        },
+      ],
+      wouldChangeIf:
+        "Si hubiera mandado un solo heartbeat en los últimos 5 minutos, esto no existía.",
+    },
   },
+
   "volt:long-session": {
-    actionId: "create-ticket",
-    reason: "Sesión anómala frente a su propio histórico: revisar sin urgencia.",
-    message:
-      "La estación {entidad} lleva una sesión de carga muy por encima de lo normal para ella. Vale una revisión.",
+    decision: {
+      actionId: "create-ticket",
+      reason: "Sesión anómala frente a su propio histórico: revisar sin urgencia.",
+      message:
+        "La estación {entidad} lleva una sesión de carga muy por encima de lo normal para ella. Vale una revisión.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "alert-ops",
+          reason: "No hay nadie varado: sacar al equipo de guardia por esto es ruido.",
+        },
+        {
+          actionId: "ignore",
+          reason: "Se repite contra su propio histórico; conviene que quede anotado.",
+        },
+      ],
+      wouldChangeIf:
+        "Si la sesión estuviera dentro del percentil 95 de esta misma estación, no era nada.",
+    },
   },
+
   "volt:demand-spike": {
-    actionId: "ignore",
-    reason: "Un pico de demanda no es una falla: es la red funcionando.",
-    message: "Pico de demanda concentrado en la zona {entidad}. Sin acción.",
+    decision: {
+      actionId: "ignore",
+      reason: "Un pico de demanda no es una falla: es la red funcionando.",
+      message: "Pico de demanda concentrado en la zona {entidad}. Sin acción.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "alert-ops",
+          reason: "Despertar a la guardia porque la red se está usando sería el peor aviso.",
+        },
+        {
+          actionId: "create-ticket",
+          reason: "No hay nada roto que un técnico pueda ir a arreglar.",
+        },
+      ],
+      wouldChangeIf:
+        "Si en la misma zona hubiera además estaciones entrando en Faulted, esto era una alerta.",
+    },
   },
+
   "restaurant:no-show": {
-    actionId: "avisar-dueno",
-    reason: "En hora pico una reserva sin check-in es plata parada.",
-    message:
-      "La {entidad} sigue reservada y nadie llegó. Si en unos minutos no aparecen, conviene liberarla.",
+    decision: {
+      actionId: "avisar-dueno",
+      reason: "En hora pico una reserva sin check-in es plata parada.",
+      message:
+        "La {entidad} sigue reservada y nadie llegó. Si en unos minutos no aparecen, conviene liberarla.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "liberar-reserva",
+          reason: "Liberar sin avisar deja al que llega tarde sin mesa y sin explicación.",
+        },
+        {
+          actionId: "ignore",
+          reason: "En hora pico esa mesa vacía es la que no se factura.",
+        },
+      ],
+      wouldChangeIf: "Si la mesa hubiera pasado a Ocupada antes de los 15 minutos, no avisaba.",
+    },
   },
+
   "restaurant:sobremesa": {
-    actionId: "ignore",
-    reason: "Una sobremesa larga es un cliente contento, no un problema.",
-    message: "La {entidad} lleva rato ocupada. Sin acción.",
+    decision: {
+      actionId: "ignore",
+      reason: "Una sobremesa larga es un cliente contento, no un problema.",
+      message: "La {entidad} lleva rato ocupada. Sin acción.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "avisar-dueno",
+          reason: "Avisarle al dueño de cada sobremesa lo entrena a ignorar el teléfono.",
+        },
+        {
+          actionId: "liberar-reserva",
+          reason: "Hay gente sentada en esa mesa: no hay ninguna reserva que liberar.",
+        },
+      ],
+      wouldChangeIf: "Si además hubiera reservas esperando mesa, valía avisarle al dueño.",
+    },
   },
+
   "restaurant:rush": {
-    actionId: "avisar-dueno",
-    reason: "Varias mesas ocupándose a la vez: el salón se va a saturar.",
-    message: "Se están ocupando varias mesas al mismo tiempo. Conviene reforzar el salón.",
+    decision: {
+      actionId: "avisar-dueno",
+      reason: "Varias mesas ocupándose a la vez: el salón se va a saturar.",
+      message: "Se están ocupando varias mesas al mismo tiempo. Conviene reforzar el salón.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "liberar-reserva",
+          reason: "El problema es de gente, no de mesas: liberar una no suma un mozo.",
+        },
+        {
+          actionId: "ignore",
+          reason: "Enterarse de la ráfaga cuando ya explotó es enterarse tarde.",
+        },
+      ],
+      wouldChangeIf:
+        "Si las mesas se hubieran ocupado de a una en vez de cuatro en 15 minutos, no avisaba.",
+    },
   },
 }
 
@@ -295,20 +416,34 @@ export function offlineDecision(
   domain: DomainId,
   detection: Detection,
   config: DomainConfig,
-): Decision {
-  const recorded = OFFLINE_DECISIONS[`${domain}:${detection.ruleId}`]
+): Verdict {
+  const recorded = OFFLINE_VERDICTS[`${domain}:${detection.ruleId}`]
 
   if (!recorded) {
+    const actionId = fallbackActionId(config)
     return {
-      actionId: fallbackActionId(config),
-      reason: `No hay decisión pregrabada para la regla "${detection.ruleId}".`,
-      message: `Sin decisión pregrabada para ${config.entity.singular} ${detection.entityId}.`,
+      decision: {
+        actionId,
+        reason: `No hay decisión pregrabada para la regla "${detection.ruleId}".`,
+        message: `Sin decisión pregrabada para ${config.entity.singular} ${detection.entityId}.`,
+      },
+      // La escena nunca queda coja: la boleta se dibuja igual, con las mismas
+      // filas que tendría en vivo.
+      deliberation: {
+        rejected: config.actions
+          .filter((a) => a.id !== actionId)
+          .map((a) => ({ actionId: a.id, reason: "Sin motivo pregrabado para esta regla." })),
+        wouldChangeIf: "Sin contrafáctico pregrabado para esta regla.",
+      },
     }
   }
 
   return {
-    ...recorded,
-    message: recorded.message.replaceAll("{entidad}", detection.entityId),
+    decision: {
+      ...recorded.decision,
+      message: recorded.decision.message.replaceAll("{entidad}", detection.entityId),
+    },
+    deliberation: recorded.deliberation,
   }
 }
 

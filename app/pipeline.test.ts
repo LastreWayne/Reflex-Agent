@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { CONFIGS } from "./domains.js"
+import { CONFIGS, DOMAIN_IDS } from "./domains.js"
 import {
   DEFAULT_AT,
   DEFAULT_MAX_DECISIONS,
   DEFAULT_PARAMS,
-  OFFLINE_DECISIONS,
+  OFFLINE_VERDICTS,
   buildRun,
   findAction,
   formatClock,
@@ -168,15 +168,15 @@ describe("decisiones pregrabadas (modo offline)", () => {
   it("toda regla de todo dominio tiene decisión pregrabada", () => {
     for (const [domain, config] of Object.entries(CONFIGS)) {
       for (const rule of config.rules) {
-        expect(OFFLINE_DECISIONS[`${domain}:${rule.id}`], `${domain}:${rule.id}`).toBeDefined()
+        expect(OFFLINE_VERDICTS[`${domain}:${rule.id}`], `${domain}:${rule.id}`).toBeDefined()
       }
     }
   })
 
   it("toda decisión pregrabada apunta a una acción que existe en su config", () => {
-    for (const [key, decision] of Object.entries(OFFLINE_DECISIONS)) {
+    for (const [key, verdict] of Object.entries(OFFLINE_VERDICTS)) {
       const domain = key.split(":")[0] as keyof typeof CONFIGS
-      expect(findAction(CONFIGS[domain], decision.actionId), key).toBeDefined()
+      expect(findAction(CONFIGS[domain], verdict.decision.actionId), key).toBeDefined()
     }
   })
 
@@ -184,16 +184,16 @@ describe("decisiones pregrabadas (modo offline)", () => {
     const run = buildRun({ ...base, forceIncident: true })
     const detection = run.queued[0]
     expect(detection).toBeDefined()
-    const decision = offlineDecision("volt", detection!, run.config)
-    expect(decision.message).toContain(detection!.entityId)
-    expect(decision.message).not.toContain("{entidad}")
+    const verdict = offlineDecision("volt", detection!, run.config)
+    expect(verdict.decision.message).toContain(detection!.entityId)
+    expect(verdict.decision.message).not.toContain("{entidad}")
   })
 
   it("no duplica el sustantivo del dominio: el nombre va en la plantilla, no en {entidad}", () => {
     // Regresión: interpolar `${entity.singular} ${entityId}` dentro de una
     // plantilla que ya decía "La estación {entidad}" producía
     // "La estación estación EVC-01".
-    for (const [key, recorded] of Object.entries(OFFLINE_DECISIONS)) {
+    for (const [key, recorded] of Object.entries(OFFLINE_VERDICTS)) {
       const domain = key.split(":")[0] as keyof typeof CONFIGS
       const config = CONFIGS[domain]
       const message = offlineDecision(
@@ -208,9 +208,9 @@ describe("decisiones pregrabadas (modo offline)", () => {
           cooldownKey: "c",
         },
         config,
-      ).message
+      ).decision.message
       expect(message, key).not.toContain(`${config.entity.singular} ${config.entity.singular}`)
-      expect(message, key).toBe(recorded.message.replaceAll("{entidad}", "X-1"))
+      expect(message, key).toBe(recorded.decision.message.replaceAll("{entidad}", "X-1"))
     }
   })
 
@@ -218,11 +218,11 @@ describe("decisiones pregrabadas (modo offline)", () => {
     const run = buildRun({ ...base, domain: "restaurant", forceIncident: true })
     const detection = run.queued.find((d) => d.ruleId === "no-show")
     expect(detection).toBeDefined()
-    expect(offlineDecision("restaurant", detection!, run.config).message).toContain("mesa")
+    expect(offlineDecision("restaurant", detection!, run.config).decision.message).toContain("mesa")
   })
 
   it("una regla sin pregrabar cae a la acción de descarte en vez de romper", () => {
-    const decision = offlineDecision(
+    const verdict = offlineDecision(
       "volt",
       {
         ruleId: "regla-inventada",
@@ -235,8 +235,75 @@ describe("decisiones pregrabadas (modo offline)", () => {
       },
       CONFIGS.volt,
     )
-    expect(decision.actionId).toBe("ignore")
-    expect(findAction(CONFIGS.volt, decision.actionId)).toBeDefined()
+    expect(verdict.decision.actionId).toBe("ignore")
+    expect(findAction(CONFIGS.volt, verdict.decision.actionId)).toBeDefined()
+  })
+})
+
+describe("las decisiones pregrabadas", () => {
+  it("cubren exactamente las otras acciones de su dominio", () => {
+    for (const clave of Object.keys(OFFLINE_VERDICTS)) {
+      const [domain] = clave.split(":") as [keyof typeof CONFIGS]
+      const verdict = OFFLINE_VERDICTS[clave]!
+      const esperadas = CONFIGS[domain].actions
+        .map((a) => a.id)
+        .filter((id) => id !== verdict.decision.actionId)
+      expect(verdict.deliberation.rejected.map((r) => r.actionId)).toEqual(esperadas)
+    }
+  })
+
+  it("ninguna tiene un motivo de rechazo ni un contrafáctico vacío", () => {
+    for (const verdict of Object.values(OFFLINE_VERDICTS)) {
+      expect(verdict.deliberation.wouldChangeIf.length).toBeGreaterThan(10)
+      for (const r of verdict.deliberation.rejected) {
+        expect(r.reason.length).toBeGreaterThan(10)
+      }
+    }
+  })
+
+  it("hay una pregrabada por cada regla de cada dominio", () => {
+    for (const domain of DOMAIN_IDS) {
+      for (const rule of CONFIGS[domain].rules) {
+        expect(OFFLINE_VERDICTS[`${domain}:${rule.id}`]).toBeDefined()
+      }
+    }
+  })
+
+  it("la rama de fallback igual devuelve un veredicto completo", () => {
+    const config = CONFIGS.volt
+    const verdict = offlineDecision(
+      "volt",
+      {
+        ruleId: "regla-inexistente",
+        entityId: "EVC-09",
+        detectedAt: "2026-07-26T20:00:00.000Z",
+        severity: "low",
+        evidence: {},
+        dedupKey: "k",
+        cooldownKey: "c",
+      },
+      config,
+    )
+    expect(verdict.deliberation.rejected).toHaveLength(config.actions.length - 1)
+    expect(verdict.deliberation.wouldChangeIf).not.toBe("")
+  })
+
+  it("reemplaza {entidad} por el id concreto", () => {
+    const verdict = offlineDecision(
+      "volt",
+      {
+        ruleId: "offline",
+        entityId: "EVC-02",
+        detectedAt: "2026-07-26T20:00:00.000Z",
+        severity: "high",
+        evidence: {},
+        dedupKey: "k",
+        cooldownKey: "c",
+      },
+      CONFIGS.volt,
+    )
+    expect(verdict.decision.message).toContain("EVC-02")
+    expect(verdict.decision.message).not.toContain("{entidad}")
   })
 })
 
