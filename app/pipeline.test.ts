@@ -5,6 +5,8 @@ import {
   DEFAULT_MAX_DECISIONS,
   DEFAULT_PARAMS,
   OFFLINE_VERDICTS,
+  buildBallot,
+  buildFunnel,
   buildRun,
   findAction,
   formatClock,
@@ -349,5 +351,74 @@ describe("formateo", () => {
     const filas = formatEvidence(detection!.evidence)
     expect(filas.length).toBeGreaterThan(0)
     for (const fila of filas) expect(fila.label).not.toMatch(/Ms$|At$/)
+  })
+})
+
+describe("buildFunnel", () => {
+  it("cuenta cada etapa del embudo", () => {
+    const snap = buildRun({ ...DEFAULT_PARAMS, forceIncident: true })
+    const f = buildFunnel(snap)
+    expect(f.events).toBe(snap.events.length)
+    expect(f.intervals).toBe(snap.intervals.length)
+    expect(f.detections).toBe(snap.classified.length)
+  })
+
+  it("las tres salidas suman el total de detecciones", () => {
+    const snap = buildRun({ ...DEFAULT_PARAMS, forceIncident: true })
+    const f = buildFunnel(snap)
+    expect(f.silenced + f.overCap + f.delivered).toBe(f.detections)
+  })
+
+  it("no mezcla lo suprimido con lo que quedó fuera del cupo de la demo", () => {
+    const snap = buildRun({ ...DEFAULT_PARAMS, forceIncident: true, maxDecisions: 1 })
+    const f = buildFunnel(snap)
+    expect(f.delivered).toBeLessThanOrEqual(1)
+    expect(f.overCap).toBe(snap.classified.filter((c) => c.status === "fuera-de-cupo").length)
+  })
+})
+
+describe("buildBallot", () => {
+  const config = CONFIGS.volt
+  const verdict = {
+    decision: { actionId: "create-ticket", reason: "vale una revisión", message: "revisar" },
+    deliberation: {
+      rejected: [
+        { actionId: "alert-ops", reason: "no hay nadie varado" },
+        { actionId: "ignore", reason: "conviene que quede anotado" },
+      ],
+      wouldChangeIf: "si estuviera dentro del p95, no era nada",
+    },
+  }
+
+  it("devuelve una fila por acción del config, siempre en el orden del config", () => {
+    expect(buildBallot(config, verdict).map((r) => r.actionId)).toEqual(
+      config.actions.map((a) => a.id),
+    )
+  })
+
+  it("marca la elegida y le adjunta el mensaje", () => {
+    const fila = buildBallot(config, verdict).find((r) => r.actionId === "create-ticket")!
+    expect(fila.status).toBe("elegida")
+    expect(fila.reason).toBe("vale una revisión")
+    expect(fila.message).toBe("revisar")
+  })
+
+  it("las descartadas llevan su motivo y ningún mensaje", () => {
+    const fila = buildBallot(config, verdict).find((r) => r.actionId === "alert-ops")!
+    expect(fila.status).toBe("descartada")
+    expect(fila.reason).toBe("no hay nadie varado")
+    expect(fila.message).toBeNull()
+  })
+
+  it("expone el type de cada acción, para que se vea que no todas avisan", () => {
+    const tipos = buildBallot(config, verdict).map((r) => r.actionType)
+    expect(tipos).toEqual(["discord", "github_issue", "noop"])
+  })
+
+  it("sin veredicto devuelve la boleta completa y sin ganadora", () => {
+    const filas = buildBallot(config, null)
+    expect(filas).toHaveLength(config.actions.length)
+    expect(filas.every((r) => r.status === "sin-resolver")).toBe(true)
+    expect(filas.every((r) => r.reason === null)).toBe(true)
   })
 })

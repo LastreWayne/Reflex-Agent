@@ -514,3 +514,93 @@ export function formatEvidence(evidence: Record<string, unknown>): { label: stri
     value: formatEvidenceValue(key, value),
   }))
 }
+
+/**
+ * El embudo: lo que entró, lo que el motor calló, y lo que llegó a una
+ * persona. Es el argumento anti-bot-de-notificaciones dicho en números —
+ * un bot manda las N; este calló las que ya había avisado.
+ */
+export interface Funnel {
+  events: number
+  intervals: number
+  detections: number
+  /** Calladas por dedup o cooldown: el motor conteniéndose. */
+  silenced: number
+  /** Recortadas por `maxDecisions`. NO es contención: es el tope de la demo. */
+  overCap: number
+  /** Las que llegaron a decidir y ejecutar. */
+  delivered: number
+}
+
+export function buildFunnel(snapshot: RunSnapshot): Funnel {
+  let silenced = 0
+  let overCap = 0
+  let delivered = 0
+  for (const c of snapshot.classified) {
+    if (c.status === "suprimida") silenced++
+    else if (c.status === "fuera-de-cupo") overCap++
+    else delivered++
+  }
+  return {
+    events: snapshot.events.length,
+    intervals: snapshot.intervals.length,
+    detections: snapshot.classified.length,
+    silenced,
+    overCap,
+    delivered,
+  }
+}
+
+export type BallotRowStatus = "elegida" | "descartada" | "sin-resolver"
+
+export interface BallotRow {
+  actionId: string
+  /** discord · github_issue · state_mutation · ntfy · webhook · noop */
+  actionType: string
+  /** La description del config: qué hace esta acción. */
+  description: string
+  status: BallotRowStatus
+  /** El motivo de la elegida, o el porqué del rechazo. `null` sin resolver. */
+  reason: string | null
+  /** Sólo la elegida: el texto que le llega a la persona. */
+  message: string | null
+}
+
+/**
+ * La boleta: SIEMPRE todas las acciones del dominio, SIEMPRE en el orden en
+ * que el config las declara. Que se vean las que no eligió es el punto — sin
+ * las alternativas, el agente es indistinguible de un `switch (ruleId)`.
+ *
+ * `verdict === null` es el caso de error: la boleta se dibuja completa y sin
+ * ganadora, que es más honesto que una tarjeta roja sin contexto.
+ */
+export function buildBallot(config: DomainConfig, verdict: Verdict | null): BallotRow[] {
+  return config.actions.map((action) => {
+    const base = {
+      actionId: action.id,
+      actionType: action.type,
+      description: action.description,
+    }
+
+    if (verdict === null) {
+      return { ...base, status: "sin-resolver" as const, reason: null, message: null }
+    }
+
+    if (action.id === verdict.decision.actionId) {
+      return {
+        ...base,
+        status: "elegida" as const,
+        reason: verdict.decision.reason,
+        message: verdict.decision.message,
+      }
+    }
+
+    const rechazo = verdict.deliberation.rejected.find((r) => r.actionId === action.id)
+    return {
+      ...base,
+      status: "descartada" as const,
+      reason: rechazo?.reason ?? null,
+      message: null,
+    }
+  })
+}
