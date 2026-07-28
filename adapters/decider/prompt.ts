@@ -1,38 +1,87 @@
 import type { Detection, DomainConfig } from "../../engine/schema.js"
 
+interface StringProp {
+  type: "string"
+  description: string
+}
+
+/**
+ * El objeto de rechazos. Sus claves son los ids de las OTRAS acciones del
+ * config, y van todas en `required`: con `strict: true`, eso hace que el
+ * modelo no pueda omitir ninguna alternativa. La exhaustividad la garantiza
+ * el schema, no una instrucción en el prompt que el modelo pueda saltear.
+ */
+interface RejectedProp {
+  type: "object"
+  properties: Record<string, StringProp>
+  required: string[]
+  additionalProperties: false
+}
+
 export interface DeciderTool {
   name: string
   description: string
   strict: true
   input_schema: {
     type: "object"
-    properties: Record<string, { type: "string"; description: string }>
-    required: ["message", "reason"]
+    properties: {
+      message: StringProp
+      reason: StringProp
+      rejected: RejectedProp
+      wouldChangeIf: StringProp
+    }
+    required: ["message", "reason", "rejected", "wouldChangeIf"]
     additionalProperties: false
   }
 }
 
 export function buildTools(config: DomainConfig): DeciderTool[] {
-  return config.actions.map((action) => ({
-    name: action.id,
-    description: action.description,
-    strict: true,
-    input_schema: {
-      type: "object",
-      properties: {
-        message: {
-          type: "string",
-          description: "El texto que le llega a la persona. Escribilo en el tono del dominio.",
+  return config.actions.map((action) => {
+    // Las otras acciones del config, en el orden en que están declaradas.
+    const otras = config.actions.filter((a) => a.id !== action.id)
+
+    const rejectedProps: Record<string, StringProp> = {}
+    for (const otra of otras) {
+      // Se interpola `otra.description`, que ya viaja al modelo como la
+      // description de SU tool. Nunca `otra.config`: ahí viven los `env:`.
+      rejectedProps[otra.id] = {
+        type: "string",
+        description: `Por qué NO elegiste "${otra.id}" (${otra.description}). Una frase concreta.`,
+      }
+    }
+
+    return {
+      name: action.id,
+      description: action.description,
+      strict: true,
+      input_schema: {
+        type: "object",
+        properties: {
+          message: {
+            type: "string",
+            description: "El texto que le llega a la persona. Escribilo en el tono del dominio.",
+          },
+          reason: {
+            type: "string",
+            description: "Por qué elegiste esta acción. Una frase, para el log.",
+          },
+          rejected: {
+            type: "object",
+            properties: rejectedProps,
+            required: otras.map((a) => a.id),
+            additionalProperties: false,
+          },
+          wouldChangeIf: {
+            type: "string",
+            description:
+              "Qué tendría que haber sido distinto en la evidencia para que eligieras otra acción. Una frase concreta, con el número que importa.",
+          },
         },
-        reason: {
-          type: "string",
-          description: "Por qué elegiste esta acción. Una frase, para el log.",
-        },
+        required: ["message", "reason", "rejected", "wouldChangeIf"],
+        additionalProperties: false,
       },
-      required: ["message", "reason"],
-      additionalProperties: false,
-    },
-  }))
+    }
+  })
 }
 
 export function buildPrompt(

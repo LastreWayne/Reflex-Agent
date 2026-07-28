@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { buildPrompt, buildTools } from "./prompt.js"
 import { DomainConfigSchema, type Detection } from "../../engine/schema.js"
 import voltRaw from "../../configs/volt.json" with { type: "json" }
+import restaurantRaw from "../../configs/restaurant.json" with { type: "json" }
 
 const config = DomainConfigSchema.parse(voltRaw)
 
@@ -32,7 +33,33 @@ describe("buildTools", () => {
     for (const tool of buildTools(config)) {
       expect(tool.strict).toBe(true)
       expect(tool.input_schema.additionalProperties).toBe(false)
-      expect(tool.input_schema.required).toEqual(["message", "reason"])
+      expect(tool.input_schema.required).toEqual([
+        "message",
+        "reason",
+        "rejected",
+        "wouldChangeIf",
+      ])
+    }
+  })
+
+  it("cada tool pide un rechazo por CADA otra acción, y ninguno por la propia", () => {
+    for (const tool of buildTools(config)) {
+      const otras = config.actions.map((a) => a.id).filter((id) => id !== tool.name)
+      expect(Object.keys(tool.input_schema.properties.rejected.properties)).toEqual(otras)
+      expect(tool.input_schema.properties.rejected.required).toEqual(otras)
+    }
+  })
+
+  it("el objeto de rechazos también viene cerrado", () => {
+    for (const tool of buildTools(config)) {
+      expect(tool.input_schema.properties.rejected.additionalProperties).toBe(false)
+      expect(tool.input_schema.properties.rejected.type).toBe("object")
+    }
+  })
+
+  it("pide el contrafáctico en todas las tools", () => {
+    for (const tool of buildTools(config)) {
+      expect(tool.input_schema.properties.wouldChangeIf.type).toBe("string")
     }
   })
 
@@ -57,5 +84,17 @@ describe("buildPrompt", () => {
     expect(user).toContain("Estación atascada en falla")
     expect(user).toContain("EVC-04")
     expect(user).toContain("720000")
+  })
+})
+
+describe("buildTools — restaurant", () => {
+  const restaurant = DomainConfigSchema.parse(restaurantRaw)
+
+  it("la tool de liberar-reserva pide rechazos de avisar-dueno e ignore", () => {
+    const tool = buildTools(restaurant).find((t) => t.name === "liberar-reserva")!
+    expect(Object.keys(tool.input_schema.properties.rejected.properties)).toEqual([
+      "avisar-dueno",
+      "ignore",
+    ])
   })
 })
