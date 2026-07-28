@@ -66,14 +66,34 @@ const T = {
    compone: 1 − (1 − 0.546)² = 0.794. El trazo es --tinta-media, no --tinta:
    un dibujo callado deja subir la densidad sin comerse el texto de arriba. */
 const COBERTURA_PEOR = 0.83
-const ALFA_HERO = 0.68
-const ALFA_PESTANA = 0.92
+
+/* ── Los alfa del vidrio, 27/07 · segunda vuelta ───────────────────────
+   El humano pidió el marco MUCHO más transparente. Bajó de 0.68 a 0.30, y
+   a 0.30 `--tinta-media` da 2.67:1 sobre el peor momento del campo: no
+   pasa. La salida no fue subir el vidrio entero —eso sería deshacer el
+   pedido— sino poner densidad sólo bajo las letras: `--lavado-hero`, un
+   rectángulo de papel con halo anclado al bloque de texto (globals.css § 6).
+
+   El vidrio vive en el canto; el lavado vive bajo el texto. Las dos capas
+   componen: α = a₁ + a₂·(1 − a₁). */
+const ALFA_HERO = 0.3
+const ALFA_LAVADO = 0.56
+const ALFA_PESTANA = 0.88
+const ALFA_PESTANA_ABIERTA = 0.95
 const ALFA_HERO_SIN_SOPORTE = 0.94
+
+/** Dos capas del mismo papel, una sobre la otra. */
+const componer = (a1, a2) => a1 + a2 * (1 - a1)
+const ALFA_HERO_LAVADO = componer(ALFA_HERO, ALFA_LAVADO)
 
 const flujoPeor = sobre(T["tinta-media"], COBERTURA_PEOR, T.papel)
 T["flujo-peor"] = flujoPeor
+/* El vidrio pelado: lo que se ve del marco donde NO hay texto. */
 T["vidrio-hero-peor"] = sobre(T.vidrio, ALFA_HERO, flujoPeor)
+/* El vidrio con el lavado encima: lo que hay debajo de CADA letra del hero. */
+T["vidrio-hero-lavado-peor"] = sobre(T.vidrio, ALFA_HERO_LAVADO, flujoPeor)
 T["vidrio-pestana-peor"] = sobre(T.vidrio, ALFA_PESTANA, flujoPeor)
+T["vidrio-pestana-abierta"] = sobre(T.vidrio, ALFA_PESTANA_ABIERTA, flujoPeor)
 T["vidrio-hero-sin-soporte"] = sobre(T.vidrio, ALFA_HERO_SIN_SOPORTE, flujoPeor)
 /* Y el mejor caso, que es el peor para un trazo AMARILLO sobre el vidrio. */
 T["vidrio-hero-mejor"] = sobre(T.vidrio, ALFA_HERO, T.papel)
@@ -102,14 +122,21 @@ const PARES = [
   ["linea-control", "papel", 3, "borde de control sobre papel (no-texto, 1.4.11)"],
   ["linea-control", "papel-alto", 3, "borde de control sobre tarjeta"],
 
-  /* ── VIDRIO · el peor momento del fondo animado ─────────────────── */
-  ["tinta", "vidrio-hero-peor", 4.5, "TÍTULO sobre vidrio, fondo en su peor momento"],
-  ["tinta-media", "vidrio-hero-peor", 4.5, "BAJADA sobre vidrio, peor momento"],
+  /* ── VIDRIO · el peor momento del fondo animado ───────────────────
+     TODO el texto del hero vive adentro de `.hero-titulo`, o sea sobre el
+     vidrio MÁS el lavado. Los dos pares de abajo son los que mandan. */
+  ["tinta", "vidrio-hero-lavado-peor", 4.5, "TÍTULO sobre vidrio + lavado, peor momento"],
+  ["tinta-media", "vidrio-hero-lavado-peor", 4.5, "LEMA Y BAJADA sobre vidrio + lavado, peor momento"],
+  /* Y el vidrio pelado, que es lo que se ve del marco donde no hay letras.
+     `--tinta` aguanta igual; `--tinta-media` NO, y por eso la regla de
+     DESIGN.md es que fuera del bloque de texto el hero no lleva texto. */
+  ["tinta", "vidrio-hero-peor", 4.5, "tinta sobre el vidrio PELADO, peor momento"],
   ["tinta", "vidrio-hero-sin-soporte", 4.5, "título sin backdrop-filter (fallback)"],
   ["tinta-media", "vidrio-hero-sin-soporte", 4.5, "bajada sin backdrop-filter (fallback)"],
   ["tinta", "vidrio-pestana-peor", 4.5, "TÍTULO DE PESTAÑA sobre vidrio, peor momento"],
   ["tinta-media", "vidrio-pestana-peor", 4.5, "TEXTO DE PESTAÑA sobre vidrio, peor momento"],
   ["tinta-tenue", "vidrio-pestana-peor", 4.5, "orden de pestaña sobre vidrio, peor momento"],
+  ["tinta-media", "vidrio-pestana-abierta", 4.5, "texto de pestaña ABIERTA, peor momento"],
   ["punto-aro", "vidrio-pestana-peor", 3, "trazo de la pestaña sobre su vidrio (no-texto)"],
   ["punto-aro", "vidrio-hero-mejor", 3, "trazo de la pestaña sobre vidrio limpio (no-texto)"],
   ["linea-control", "vidrio-hero-mejor", 3, "canto del marco sobre vidrio limpio (no-texto)"],
@@ -120,7 +147,9 @@ console.log("── compuestos ──")
 for (const k of [
   "flujo-peor",
   "vidrio-hero-peor",
+  "vidrio-hero-lavado-peor",
   "vidrio-pestana-peor",
+  "vidrio-pestana-abierta",
   "vidrio-hero-sin-soporte",
   "vidrio-hero-mejor",
 ]) {

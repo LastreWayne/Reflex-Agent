@@ -61,28 +61,33 @@
 
   --foco: var(--oro);
 
-  /* ── Vidrio ────────────────────────────────────────────────────────
+  /* ── Vidrio líquido ────────────────────────────────────────────────
      El vidrio es ESTRUCTURA, no decoración: sólo lo llevan las dos
      superficies que de verdad se apoyan sobre el fondo animado — el
      marco del hero y las pestañas. Ningún otro panel de la página lo usa.
 
-     Las opacidades no son gusto: son el resultado de medir el texto contra
-     el momento MÁS OSCURO del campo de líneas (dos trazos cruzados en el
-     pico del latido). Con 0.68 el título llega a 11.21:1 y la bajada a
-     4.83:1. `backdrop-filter: blur()` sólo promedia, así que el píxel real
-     nunca es peor que ese cálculo.
+     Acá vive SÓLO el color. Cuánto tinte, cuánto desenfoque y cuánta
+     refracción lleva cada superficie son props de `useVidrio`
+     (app/vidrio-liquido.tsx), porque son distintos en cada una y porque
+     el valor de la refracción tiene que viajar inline. Ver § 5.
+
+     Los alfa no son gusto: salen de medir el texto contra el momento MÁS
+     OSCURO del campo de líneas (dos trazos cruzados en el pico del latido).
+     El marco bajó de 0.68 a 0.30 —el humano lo pidió mucho más
+     transparente— y a ese tinte `--tinta-media` NO llega a 4.5:1 (2.67).
+     Lo que lo sostiene es `--lavado-hero`, un lavado suave bajo el bloque
+     de texto: 0.30 + 0.56·0.70 = 0.692 de tinte efectivo, y ahí sí pasa.
+     El vidrio vive en el canto y el lavado vive bajo las letras.
 
      REGLA: dentro de `.hero`, fuera de las pestañas, no va `--tinta-tenue`.
-     Sobre el vidrio del marco en su peor momento no llega a 4.5:1. El
-     hero usa `--tinta` y `--tinta-media`, y nada más. Las pestañas sí pueden
-     (su vidrio es más denso: 5.03:1). */
-  --vidrio: rgba(250, 248, 242, 0.68);
-  --vidrio-opaco: rgba(250, 248, 242, 0.94);
-  --vidrio-pestana: rgba(250, 248, 242, 0.92);
-  --vidrio-pestana-alto: rgba(252, 250, 244, 0.95);
-  --vidrio-lustre: rgba(255, 255, 255, 0.5);
-  --desenfoque: 10px;
-  --desenfoque-pestana: 14px;
+     El hero usa `--tinta` y `--tinta-media`, y nada más. */
+  --vidrio-papel: 250 248 242;
+  /* Sin `backdrop-filter` el vidrio no difumina nada: si se quedara
+     traslúcido el texto caería sobre las líneas en crudo. Se vuelve casi
+     opaco. Va por su propia variable para que la hoja pueda pisar al tinte
+     que las props ponen inline sin recurrir a `!important`. */
+  --vidrio-tinte-sin-soporte: 0.94;
+  --lavado-hero: 0.56;
 
   /* ── Ritmo ─────────────────────────────────────────────────────────
      Un solo compás. Arriba de un título va más aire que abajo. */
@@ -104,8 +109,19 @@
   --rapido: 140ms;
   --medio: 320ms;
   --lento: 560ms;
-  /* Salida exponencial. Es la única curva de la hoja. */
+  /* Salida exponencial. Es la curva de todo lo que abre y cierra. */
   --salida: cubic-bezier(0.16, 1, 0.3, 1);
+  /* La segunda y última curva: el overshoot del dock. Es lo único que una
+     librería de springs haría mejor —el rebote al asentarse— y esto lo
+     aproxima sin sumar 50 KB a horas del deploy. */
+  --rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dock: 260ms;
+
+  /* ── El largo de las pestañas ──────────────────────────────────────
+     Dormida y despierta. El ancho real es la interpolación entre las dos
+     según la distancia del cursor; ver § 6 y app/pestanas-dock.tsx. */
+  --pestana-corta: clamp(5.75rem, 8.5vw, 8rem);
+  --pestana-larga: clamp(10rem, 15vw, 14rem);
 
   /* ── Tipografía ────────────────────────────────────────────────────
      Display: Instrument Serif (next/font, auto-hosteada).
@@ -190,6 +206,42 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
   margin: 0;
+}
+
+/*
+ * El rótulo de los caminos, ahora visible. Sigue siendo el mismo <h2> que
+ * etiqueta el grupo de pestañas por `aria-labelledby` — mostrarlo no rompe esa
+ * relación, sólo deja de esconderla.
+ *
+ * Va en serif para atarlo al titular, pero CHICO: el hero manda y esto es un
+ * rótulo, no un segundo título. Y con una línea de oro corta al lado en vez de
+ * un subrayado completo — una regla que cruza todo el ancho competiría con las
+ * pestañas que tiene justo debajo.
+ */
+.rotulo-caminos {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e3);
+  margin: 0 0 var(--e3);
+  font-family: var(--serif);
+  font-size: clamp(0.95rem, 1.5vw, 1.2rem);
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  color: var(--tinta-media);
+}
+
+/* La línea crece hasta donde quede lugar, pero el rótulo manda el ancho. */
+.rotulo-caminos::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    var(--punto-aro) 0,
+    rgb(0 0 0 / 0) 12rem
+  );
+  opacity: 0.7;
 }
 
 :focus-visible {
@@ -367,58 +419,285 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   5 · PORTADA — el primer frame: un marco de vidrio embutido con el
+   5 · VIDRIO LÍQUIDO — la superficie, leída de las tres referencias
+
+        `references/liquidglass1..3.png` + `references/liquid-glass-card.tsx`.
+        La receta es CSS + SVG y no necesita una línea de librería de
+        animación; lo que framer-motion maneja en la referencia (drag,
+        click-para-expandir, scale en hover) acá no existe.
+
+          · EL FILO ES EL EFECTO. En las tres capturas es lo primero que se
+            ve. Sobre fondo oscuro alcanza con una línea blanca; sobre papel
+            hueso el blanco solo no existe, así que la traducción a modo
+            claro es un canto de DOS líneas — hairline de `--linea-control`
+            por fuera, filo blanco por dentro — que es exactamente el aro
+            plateado de `liquidglass3.png`.
+          · EL CENTRO ES CASI TRANSPARENTE. No es un panel esmerilado.
+          · EL FONDO SE DOBLA AL CRUZARLO (`liquidglass2.png`, el tallo de la
+            flor). `feTurbulence` + `feDisplacementMap`, adentro del
+            `backdrop-filter` y no al lado; el porqué —y las dos pruebas de
+            navegador que lo decidieron— están en `app/vidrio-liquido.tsx`.
+          · LOS ESPECULARES son `.vidrio-lustre`.
+
+        Los valores por superficie (tinte, desenfoque, refracción) son props
+        de `useVidrio`, no tokens: son distintos en cada una y el de la
+        refracción tiene que viajar inline para poder caer a la declaración
+        de esta hoja si el navegador no lo soporta.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.vidrio {
+  /* Defaults. Las props de `useVidrio` los pisan inline. */
+  --vidrio-tinte: 0.3;
+  --vidrio-radio: var(--radio-marco);
+  --vidrio-desenfoque: 9px;
+  --vidrio-saturacion: 1.12;
+  --vidrio-filo: 0.9;
+  --vidrio-halo: 0.1;
+  --vidrio-lustre: 0.55;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--linea-control);
+  border-radius: var(--vidrio-radio);
+  background: rgb(var(--vidrio-papel) / var(--vidrio-tinte-efectivo, var(--vidrio-tinte)));
+  backdrop-filter: blur(var(--vidrio-desenfoque)) saturate(var(--vidrio-saturacion));
+  -webkit-backdrop-filter: blur(var(--vidrio-desenfoque)) saturate(var(--vidrio-saturacion));
+  box-shadow:
+    /* Ranura para que una superficie se marque (la pestaña activa lleva
+       filo amarillo) sin borrar el vidrio de abajo. */
+    var(--vidrio-marca, 0 0 rgb(0 0 0 / 0)),
+    /* El halo: la pieza se despega del papel. */
+    0 26px 60px -34px rgb(23 20 15 / 0.5),
+    0 2px 10px rgb(23 20 15 / var(--vidrio-halo)),
+    /*
+      EL FILO. Las tres referencias son vidrio sobre fondo OSCURO: ahí un filo
+      blanco brilla solo. Sobre papel hueso, blanco contra `#f2efe7` es una
+      diferencia de ~5% y desaparece. Por eso el filo claro necesita un canto
+      OSCURO debajo contra el cual leerse: sin ese contraste, el recurso que
+      más se ve en las referencias es el que menos se ve acá.
+    */
+    inset 0 0 0 1px rgb(23 20 15 / calc(var(--vidrio-filo) * 0.28)),
+    inset 1px 1px 0 0 rgb(255 255 255 / var(--vidrio-filo)),
+    inset -1px -1px 0 0 rgb(255 255 255 / calc(var(--vidrio-filo) * 0.72)),
+    inset 0 2px 3px -2px rgb(255 255 255 / var(--vidrio-filo)),
+    inset 0 -2px 3px -2px rgb(255 255 255 / calc(var(--vidrio-filo) * 0.6));
+}
+
+/* El `<defs>` del filtro no ocupa lugar: sólo transporta el filtro. */
+.vidrio-filtro {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Los especulares: el destello del canto de arriba y los dos brillos
+   diagonales opuestos que se ven en `liquidglass3.png`. */
+.vidrio-lustre {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to bottom,
+      rgb(255 255 255 / var(--vidrio-lustre)) 0,
+      rgb(255 255 255 / 0) 18%
+    ),
+    linear-gradient(
+      132deg,
+      rgb(255 255 255 / calc(var(--vidrio-lustre) * 0.55)) 0,
+      rgb(255 255 255 / 0) 26%,
+      rgb(255 255 255 / 0) 74%,
+      rgb(255 255 255 / calc(var(--vidrio-lustre) * 0.4)) 100%
+    );
+}
+
+/* El contenido va por encima del lustre; el padding vive acá y no en la
+   superficie, para que el filo y los especulares den la vuelta completa. */
+.vidrio-cuerpo {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sin `backdrop-filter` el vidrio no difumina nada: si se quedara
+   traslúcido, el texto caería sobre las líneas en crudo. Se vuelve casi
+   opaco. Pisa al tinte que las props ponen inline por la variable
+   intermedia, no con `!important`. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .vidrio {
+    --vidrio-tinte-efectivo: var(--vidrio-tinte-sin-soporte);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   6 · PORTADA — el primer frame: un marco de vidrio embutido con el
         título adentro y las cinco pestañas abajo. Nada más entra acá:
         ni controles, ni carriles, ni mascota. Ver DESIGN.md.
    ══════════════════════════════════════════════════════════════════════ */
 
 /* El respiro de afuera del marco es donde el campo de flujo se ve en crudo,
    sin vidrio encima. Por eso no es de 4 px. */
+/*
+ * LA PORTADA SE INVIERTE, y no es capricho: es lo que hace posible el vidrio.
+ *
+ * El liquid glass de las tres referencias vive sobre fondo OSCURO. Ahí el filo
+ * blanco brilla solo y el fondo doblado tiene contraste para leerse. Sobre
+ * papel hueso, un filo blanco es una diferencia del 5% y la refracción dobla
+ * hairlines pálidas: el efecto existe en el DOM y no se ve.
+ *
+ * Así que la portada es una lámina profunda dentro de una página de papel —
+ * la composición de `references/Screenshot 2026-07-27 113240.png`. Los tokens
+ * se invierten SOLO acá adentro: todo lo que hereda (campo de flujo, texto,
+ * vidrio) se acomoda solo, y la hoja de abajo sigue siendo papel.
+ */
 .portada {
+  /*
+    NI PAPEL NI OSCURO: un tono cálido intermedio.
+    Sobre papel el vidrio no existía — filo blanco contra hueso es un 5% de
+    diferencia, y la refracción doblaba hairlines pálidas. Con fondo profundo
+    el efecto aparecía pero el mundo dejaba de ser el del proyecto.
+    Este tono es lo mínimo que hace falta para que el filo se lea y el doblez
+    tenga qué doblar, y deja la tinta oscura arriba: sigue siendo una página
+    clara. `--papel` es la palanca — subilo hacia #dcd4c4 para aclarar,
+    bajalo hacia #b0a48c para que el vidrio pese más.
+  */
+  --papel: #c4bba7;
+  --papel-alto: #d2caba;
+  --papel-hondo: #b3a992;
+  --linea: #a99e87;
+  --linea-fuerte: #8d8370;
+  --linea-control: #5f5849;
+  /* Los grises tibios se oscurecen acá: sobre papel pasaban 4.5:1 de sobra,
+     sobre este tono el tenue caía a 3.43. Medido, no estimado. */
+  --tinta-media: #4b4534;
+  --tinta-tenue: #443f2f;
+  /* El vidrio ACLARA sobre el tono medio: el panel se lee más claro que su
+     alrededor, que es exactamente cómo se lee un cristal. */
+  --vidrio-papel: 250 248 242;
+
   position: relative;
   min-height: 100svh;
   padding: clamp(0.75rem, 2.2vw, 2rem);
-  display: flex;
+  display: grid;
+  place-items: center;
+  background: var(--papel);
+  color: var(--tinta);
 }
 
-/* El marco. Es una de las dos únicas superficies de vidrio de la página. */
+/* El campo de flujo sobre la lámina profunda: la misma tinta media, que ahora
+   es clara, y por eso el mismo dibujo callado se lee sin subir la densidad. */
+.portada .fondo-flujo-svg {
+  opacity: 0.5;
+}
+
+/* El marco. Es una de las dos únicas superficies de vidrio de la página.
+   MÁS CHICO QUE LA PANTALLA a propósito: el campo de flujo tiene que correr
+   libre alrededor, no asomar por un margen de doce píxeles. */
 .hero {
-  position: relative;
   z-index: 1;
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+  width: min(100%, 66rem);
+  height: min(80svh, 44rem);
+  max-height: 100%;
   overflow: hidden;
-  border: 1px solid var(--linea-control);
-  border-radius: var(--radio-marco);
-  padding: clamp(var(--e5), 4vh, var(--e7)) clamp(var(--e4), 4vw, var(--e7)) 0;
-  background:
-    linear-gradient(to bottom, var(--vidrio-lustre) 0, rgba(255, 255, 255, 0) 22%),
-    var(--vidrio);
-  backdrop-filter: blur(var(--desenfoque)) saturate(1.1);
-  -webkit-backdrop-filter: blur(var(--desenfoque)) saturate(1.1);
+
+  /*
+    EL GLOW AMARILLO DEL CANTO.
+    Va por `--vidrio-marca`, que es el primer shadow de la cadena de `.vidrio`
+    y existe justamente para que una superficie se marque sin pisar el filo ni
+    el halo de abajo.
+    Son tres capas, no una: un halo suelto es decoración plana. Acá el canto
+    lleva su propia línea nítida, y el resplandor sale de ella hacia afuera y
+    hacia adentro — como luz que el borde del cristal atrapa y reparte.
+  */
+  --vidrio-marca:
+    inset 0 0 0 1px rgb(242 194 0 / 0.55),
+    inset 0 0 12px -2px rgb(242 194 0 / 0.4),
+    0 0 0 1px rgb(242 194 0 / 0.3),
+    0 0 22px -4px rgb(242 194 0 / 0.55),
+    0 0 48px -12px rgb(242 194 0 / 0.35);
 }
 
-/* Sin backdrop-filter el vidrio no difumina nada: si se quedara traslúcido,
-   el texto quedaría sobre las líneas en crudo. Se vuelve casi opaco. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+/*
+  El resplandor respira con el mismo pulso del campo de flujo, no con uno
+  propio: dos latidos distintos en la misma pantalla se leen como dos cosas
+  compitiendo. Un solo momento autoral, que ya estaba elegido.
+*/
+@media (prefers-reduced-motion: no-preference) {
   .hero {
-    background: var(--vidrio-opaco);
+    animation: hero-latido 7.5s ease-in-out infinite;
   }
+}
+
+@keyframes hero-latido {
+  0%,
+  100% {
+    --vidrio-filo: 0.92;
+  }
+  50% {
+    --vidrio-filo: 1;
+  }
+}
+
+.hero-cuerpo {
+  padding: clamp(var(--e4), 3vh, var(--e6)) clamp(var(--e4), 3vw, var(--e6)) 0;
 }
 
 .hero-centro {
   flex: 1;
+  min-height: 0;
   display: grid;
   place-items: center;
   text-align: center;
-  padding-block: var(--e5);
+  padding-block: var(--e4);
 }
 
 .hero-titulo {
+  position: relative;
   width: 100%;
   max-width: 60rem;
+}
+
+/*
+ * EL LAVADO BAJO EL TEXTO — donde se resuelve la tensión.
+ *
+ * El marco pasó de 0.68 a 0.30 de tinte porque el humano lo pidió mucho más
+ * transparente. A 0.30, sobre el momento más oscuro del campo, `--tinta`
+ * todavía da 6.21:1 pero `--tinta-media` se cae a 2.67:1: la bajada y el
+ * lema no pasan. Subir el vidrio entero sería deshacer el pedido.
+ *
+ * Entonces la densidad va SÓLO donde hay letras. El vidrio vive en el canto
+ * y el lavado vive bajo el texto: 0.30 + 0.56·0.70 = 0.692 de tinte
+ * efectivo, medido en `docs/design/contraste.mjs`.
+ *
+ * Es un rectángulo de papel con halo, no un panel: sin canto duro, no se lee
+ * como una caja adentro de la caja — se lee como el núcleo de luz de
+ * `liquidglass3.png`. Y al estar anclado al bloque de texto, la meseta cubre
+ * las letras en cualquier viewport, cosa que un gradiente centrado en el
+ * marco no garantiza: una elipse no cubre bien un bloque de texto.
+ *
+ * El desenfoque es un `box-shadow`, NO `filter: blur()`. Medido: un filtro
+ * adentro de un elemento con `backdrop-filter` obliga a Chromium a rehacer
+ * el backdrop y se comía la mitad del frame rate. El box-shadow se rasteriza
+ * una vez y no vuelve a costar. Como la sombra externa no se pinta debajo de
+ * la caja, el alfa tampoco se suma consigo mismo.
+ */
+.hero-titulo::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -0.75rem -1.25rem;
+  border-radius: 2rem;
+  /* El lavado va en su propio token y no en `--vidrio-papel`: ese lo usa el
+     vidrio para ACLARAR, y acá hace falta lo contrario — un velo profundo bajo
+     el texto claro. Compartirlos pondría un halo claro detrás de tinta clara. */
+  background: rgb(var(--lavado-color, var(--vidrio-papel)) / var(--lavado-hero));
+  box-shadow: 0 0 2.75rem 1.5rem
+    rgb(var(--lavado-color, var(--vidrio-papel)) / calc(var(--lavado-hero) * 0.72));
 }
 
 /* El salto de escala ES el diseño: display enorme contra cuerpo diminuto. */
@@ -467,11 +746,22 @@ body {
   text-wrap: pretty;
 }
 
-/* ── Las cinco pestañas ───────────────────────────────────────────────
-   Mínimas, apoyadas contra el borde de abajo del marco. Al pasar por
-   encima (o al recibir foco, o al tocarlas) crecen HACIA ARRIBA y se dejan
-   leer. La banda tiene alto fijo: así una pestaña abierta no empuja al
-   título ni mueve a sus vecinas. */
+/* ── Las cinco pestañas: un dock ──────────────────────────────────────
+   Mínimas, apoyadas contra el borde de abajo del marco. CORTAS CUANDO
+   DUERMEN: el ancho de cada una responde a la distancia del cursor, así
+   que la de al lado crece bastante y la siguiente bastante menos. Eso —y
+   no un hover binario— es lo que hace que se lea como un dock; el efecto
+   viene de `references/dock-magnify.tsx`, sin la librería.
+
+   El JS sólo escribe `--cerca` (1 debajo del cursor, 0 fuera del alcance),
+   agrupado en un `requestAnimationFrame`. El ancho lo hace el `calc()` de
+   acá abajo, y el largo EN REPOSO lo decide esta hoja, no el JS: sin
+   puntero fino y con `prefers-reduced-motion` las pestañas arrancan
+   enteras. Una pestaña recortada que nadie puede agrandar es una pestaña
+   rota — y buena parte del público que vota entra desde el teléfono.
+
+   La banda tiene alto fijo: una pestaña abierta no empuja al título ni
+   mueve a sus vecinas hacia arriba. */
 
 .pestanas {
   position: relative;
@@ -479,49 +769,63 @@ body {
   list-style: none;
   margin: 0 auto;
   width: 100%;
-  max-width: 78rem;
-  height: clamp(6.5rem, 14vh, 8.5rem);
-  padding: 0 0 clamp(var(--e3), 2vh, var(--e5));
+  height: clamp(5.5rem, 12vh, 7.25rem);
+  padding: 0 0 clamp(var(--e2), 1.6vh, var(--e4));
   display: flex;
   align-items: flex-end;
+  justify-content: center;
   gap: clamp(var(--e1), 0.6vw, var(--e2));
 }
 
 .pestana {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   min-width: 0;
   display: flex;
 }
 
 .pestana-boton {
-  flex: 1;
+  /* `--cerca` la escribe el puntero (app/pestanas-dock.tsx); `--abierto` la
+     escribe el CSS con hover, foco o toque. El ancho toma el mayor de las
+     dos: así el teclado abre la pestaña entera aunque el cursor esté lejos,
+     y un `--cerca` viejo no puede cerrarla. */
+  --cerca: 0;
+  --abierto: 0;
+  width: var(--pestana-larga);
+  max-width: 100%;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
   text-align: left;
   font: inherit;
   color: inherit;
   cursor: pointer;
   padding: var(--e2) var(--e3);
-  border: 1px solid var(--punto-aro);
-  border-radius: var(--radio-pestana);
-  background:
-    linear-gradient(to bottom, var(--vidrio-lustre) 0, rgba(255, 255, 255, 0) 60%),
-    var(--vidrio-pestana);
-  backdrop-filter: blur(var(--desenfoque-pestana)) saturate(1.15);
-  -webkit-backdrop-filter: blur(var(--desenfoque-pestana)) saturate(1.15);
   transition:
-    background var(--rapido) linear,
+    width var(--dock) var(--rebote),
+    background-color var(--rapido) linear,
     box-shadow var(--rapido) linear;
 }
 
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+/* La magnificación es una gracia de PUNTERO. Donde no hay puntero fino no
+   hay nada que magnificar, y la pestaña arranca entera. */
+@media (hover: hover) and (pointer: fine) {
   .pestana-boton {
-    background: var(--vidrio-opaco);
+    width: calc(
+      var(--pestana-corta) +
+        (var(--pestana-larga) - var(--pestana-corta)) * max(var(--cerca), var(--abierto))
+    );
   }
 }
 
+/* Sin movimiento: no hay proximidad ni recorte, pero la pestaña se sigue
+   abriendo por puntero, por teclado y por toque. */
+@media (prefers-reduced-motion: reduce) {
+  .pestana-boton {
+    width: var(--pestana-larga);
+  }
+}
+
+/* El contenido, por encima del lustre del vidrio. */
 .pestana-cima {
+  position: relative;
   display: flex;
   align-items: baseline;
   gap: var(--e2);
@@ -562,6 +866,7 @@ body {
 
 /* La caja pasa de 0fr a 1fr; el panel es el que recorta. */
 .pestana-caja {
+  position: relative;
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows var(--medio) var(--salida);
@@ -589,24 +894,27 @@ body {
   grid-template-rows: 1fr;
 }
 
+/* Abierta: se agranda al largo entero (`--abierto`), se pone un poco más
+   densa y se marca con el filo amarillo POR DENTRO del vidrio — la marca va
+   por su propia ranura en el box-shadow, así no borra ni el filo blanco ni
+   el halo. El tinte sube por `--vidrio-tinte-efectivo` y no por
+   `--vidrio-tinte`, que lo pone la prop inline y ganaría siempre. */
 .pestana-boton:hover,
 .pestana-boton:focus-visible,
 .pestana[data-abierta="si"] .pestana-boton {
-  background:
-    linear-gradient(to bottom, var(--vidrio-lustre) 0, rgba(255, 255, 255, 0) 60%),
-    var(--vidrio-pestana-alto);
-  /* El filo amarillo por dentro del canto de oro: el oro carga el contraste
-     (4.29:1 sobre su propio vidrio), el amarillo carga la identidad. */
-  box-shadow: inset 0 0 0 1.5px var(--amarillo);
+  --abierto: 1;
+  --vidrio-tinte-efectivo: 0.95;
+  --vidrio-marca: inset 0 0 0 1.5px var(--amarillo);
 }
 
-/* La etapa que el visor está mostrando queda marcada aunque nadie la toque. */
+/* La etapa que el visor está mostrando queda marcada aunque nadie la toque
+   — marcada, no abierta: no se agranda sola. */
 .pestana[data-mirando="si"] .pestana-boton {
-  box-shadow: inset 0 0 0 1.5px var(--amarillo);
+  --vidrio-marca: inset 0 0 0 1.5px var(--amarillo);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   6 · ESCENA — el motor corriendo, ya debajo del primer frame
+   7 · ESCENA — el motor corriendo, ya debajo del primer frame
    ══════════════════════════════════════════════════════════════════════ */
 
 .escena {
@@ -1154,7 +1462,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   7 · TARJETAS — hojitas de papel, sin relieve
+   8 · TARJETAS — hojitas de papel, sin relieve
    ══════════════════════════════════════════════════════════════════════ */
 
 .tarjeta {
@@ -1304,7 +1612,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   8 · MASCOTA — el Reflex Agent, redibujado en papel y tinta.
+   9 · MASCOTA — el Reflex Agent, redibujado en papel y tinta.
         Sigue viviendo bajo el carril único y sigue mirando al cursor.
         Su refinamiento propio queda pendiente (DESIGN.md § Pendiente).
    ══════════════════════════════════════════════════════════════════════ */
@@ -1458,7 +1766,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   9 · PIE
+   10 · PIE
    ══════════════════════════════════════════════════════════════════════ */
 
 .pie {
@@ -1486,7 +1794,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   10 · MOVIMIENTO
+   11 · MOVIMIENTO
 
         Dos cosas se mueven en esta página, y son distintas:
 
@@ -1564,7 +1872,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   11 · ANCHOS Y ALTURAS
+   12 · ANCHOS Y ALTURAS
    ══════════════════════════════════════════════════════════════════════ */
 
 /* Pantalla baja: el título cede altura para que las pestañas sigan
@@ -1627,10 +1935,11 @@ body {
   }
 
   /* Cinco pestañas no entran de frente en un teléfono: la banda se arrastra
-     de costado y cada pestaña se abre al tocarla. */
+     de costado, cada pestaña arranca ENTERA —no hay cursor del que estar
+     cerca— y se abre al tocarla. */
   .pestanas {
     height: clamp(6rem, 16vh, 8rem);
-    max-width: none;
+    justify-content: flex-start;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scroll-snap-type: x mandatory;
@@ -1645,6 +1954,10 @@ body {
     align-items: flex-end;
   }
 
+  .pestana-boton {
+    width: 100%;
+  }
+
   .pestana-titulo {
     font-size: 1rem;
   }
@@ -1655,7 +1968,9 @@ body {
     font-size: 14px;
   }
 
-  .hero {
+  /* El padding vive en el cuerpo, no en la superficie: el filo y los
+     especulares del vidrio tienen que dar la vuelta completa. */
+  .hero-cuerpo {
     padding-inline: var(--e4);
   }
 

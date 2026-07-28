@@ -6,6 +6,8 @@ import type { Decision, Detection, DomainConfig } from "../engine/schema.js"
 import { CONFIGS, DOMAIN_IDS } from "./domains.js"
 import { FondoFlujo } from "./fondo-flujo.js"
 import { Mascota, type FaseMascota } from "./mascota.js"
+import { PestanasDock } from "./pestanas-dock.js"
+import { VidrioLiquido } from "./vidrio-liquido.js"
 import {
   buildRun,
   findAction,
@@ -575,7 +577,38 @@ export default function Page() {
           {/* Ver app/fondo-flujo.tsx: el fondo es un archivo aparte a propósito. */}
           <FondoFlujo />
 
-          <div className="hero">
+          {/*
+            El marco es una superficie de vidrio líquido de verdad: casi
+            transparente, con el filo brillante y el fondo doblándose al
+            cruzarlo. Los números —tinte, desenfoque, refracción— no son
+            gusto: el tinte es el que sostiene el contraste del texto sobre
+            el peor momento del campo. Ver `docs/design/contraste.mjs`.
+          */}
+          <VidrioLiquido
+            clase="hero"
+            claseCuerpo="hero-cuerpo"
+            /*
+              El tinte baja de 0.30 a 0.16 porque el fondo cambió de sentido:
+              sobre papel, el vidrio tenía que TAPAR para sostener el texto
+              oscuro. Sobre la lámina profunda ACLARA, y el texto claro gana
+              contraste cuanto más transparente sea el panel. Es el pedido de
+              "mucho más transparente" y el contraste tirando para el mismo
+              lado por primera vez.
+            */
+            tinte={0.16}
+            radio="var(--radio-marco)"
+            /*
+              El desenfoque bajó de 9px a 4px: era él quien borraba la
+              estructura que la refracción tiene que doblar. Desplazar un campo
+              ya difuminado no se ve. El contraste del texto NO lo sostenía el
+              blur sino el tinte, que queda igual.
+            */
+            desenfoque="4px"
+            refraccion={34}
+            filo={0.92}
+            halo={0.1}
+            lustre={0.6}
+          >
             <div className="hero-centro">
               <div className="hero-titulo">
                 <h1 className="titular">
@@ -592,45 +625,29 @@ export default function Page() {
               </div>
             </div>
 
-            <h2 id="caminos-titulo" className="rotulo-seccion">
+            <h2 id="caminos-titulo" className="rotulo-caminos">
               Los cinco caminos del motor
             </h2>
-            <ol className="pestanas" aria-labelledby="caminos-titulo">
-              {ETAPAS.map((e, i) => (
-                <li
-                  key={e.id}
-                  className="pestana"
-                  data-stage={e.id}
-                  data-encendida={carriles > i ? "si" : "no"}
-                  data-mirando={vista === "simple" && etapa === i ? "si" : "no"}
-                  data-abierta={pestanaAbierta === e.id ? "si" : "no"}
-                >
-                  <button
-                    type="button"
-                    className="pestana-boton"
-                    data-action={`camino-${e.id}`}
-                    aria-current={vista === "simple" && etapa === i ? "step" : undefined}
-                    onClick={() => tocarPestana(e.id, i)}
-                  >
-                    <span className="pestana-cima">
-                      <span className="pestana-orden" aria-hidden="true">{`0${i + 1}`}</span>
-                      <span className="pestana-titulo">{e.titulo}</span>
-                      <Lampara
-                        tono={carriles > i ? "naranja" : "apagada"}
-                        encendida={carriles > i}
-                        className="pestana-lampara"
-                      />
-                    </span>
-                    <span className="pestana-caja">
-                      <span className="pestana-panel">
-                        <span className="pestana-texto">{e.explica}</span>
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </div>
+            <PestanasDock
+              etiquetadoPor="caminos-titulo"
+              abierta={pestanaAbierta}
+              onActivar={tocarPestana}
+              caminos={ETAPAS.map((e, i) => ({
+                id: e.id,
+                titulo: e.titulo,
+                texto: e.explica,
+                encendida: carriles > i,
+                mirando: vista === "simple" && etapa === i,
+                luz: (
+                  <Lampara
+                    tono={carriles > i ? "naranja" : "apagada"}
+                    encendida={carriles > i}
+                    className="pestana-lampara"
+                  />
+                ),
+              }))}
+            />
+          </VidrioLiquido>
         </header>
 
         <div className="hoja">
