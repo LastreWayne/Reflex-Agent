@@ -163,7 +163,9 @@ export const DeliberationSchema = z.object({
 Run: `npx vitest run app/domains.test.ts`
 Expected: PASS (5 tests).
 
-`npx tsc --noEmit` va a **fallar** acá con errores en `adapters/decider/claude.ts`, `app/api/decide/route.ts` y `app/pipeline.ts`: cambió la firma de `Decider`. Es lo esperado — las tasks 4, 5 y 6 los cierran. No los arregles ahora.
+`npx tsc --noEmit` va a **fallar** acá, con **un solo** error: `adapters/decider/claude.ts`, cuyo retorno ya no satisface `Decider`. Es lo esperado — la Task 4 lo cierra. No lo arregles ahora.
+
+> **Verificado en la review de la Task 1:** `app/api/decide/route.ts` y `app/pipeline.ts` **siguen compilando**. `route.ts` infiere el tipo (`const decision = await decider(...)`) sin anotarlo, y `Response.json` acepta cualquier cosa; `pipeline.ts` nunca nombra `Decider` ni `Verdict`. **Consecuencia para la Task 5:** apenas la Task 4 devuelva un `Verdict` real, `route.ts` va a emitir en silencio `{ decision: { decision, deliberation } }` — doble anidado y mal — sin un solo error del compilador. En la Task 5, "compila" NO es evidencia de que la forma esté bien.
 
 - [ ] **Step 6: Commit**
 
@@ -2149,6 +2151,8 @@ git commit -m "chore: verificacion final del expediente"
 
 **El orden importa hasta la Task 7; después no tanto.** Las Tasks 8-12 consumen `Verdict`, que no cambia si la Task 7 obliga a aplanar el schema. Si la clave de API no aparece, las Tasks 8-11 se pueden hacer igual — pero la 7 **no se marca completa** y la 12 no se puede cerrar.
 
-**`npx tsc --noEmit` va a estar roto entre la Task 1 y la Task 10.** Es a propósito: la firma de `Decider` cambia primero y sus tres consumidores se actualizan en las Tasks 4, 5 y 6, y el último (`page.tsx`) en la 10. Los tests de cada task sí tienen que estar verdes.
+**`npx tsc --noEmit` va a estar roto entre la Task 1 y la Task 10.** Es a propósito: la firma de `Decider` cambia primero y sus consumidores se actualizan después. Los tests de cada task sí tienen que estar verdes.
+
+**Pero el compilador tapa menos de lo que parece.** Verificado en la review de la Task 1: el único archivo que falla es `adapters/decider/claude.ts`. `app/api/decide/route.ts` y `app/pipeline.ts` compilan igual porque nunca anotan el tipo. O sea que entre las Tasks 4 y 5 la ruta devuelve una forma equivocada **sin ningún error**. En las Tasks 5, 6 y 10, verificá la forma con un test, no con `tsc`.
 
 **Deuda que este trabajo NO cierra** (sigue en el ledger anterior): `@types/node` ambient project-wide, el borde `durationMs === thresholdMs`, el segundo bloque `tool_use` descartado en silencio, `actionId` sin validar contra `config.actions`, y el IMPORTANT #1 de la Task 12 (las dos rutas son endpoints públicos sin autenticación — la mitigación sigue siendo no cargar `GITHUB_TOKEN` ni `DISCORD_OPS_WEBHOOK` en el deploy público).
