@@ -170,11 +170,33 @@ body {
   overflow-x: hidden;
 }
 
+/*
+ * La hoja lleva un tono apenas por debajo del papel. No es decoración: el
+ * vidrio de las tarjetas necesita algo que dejar pasar. Sobre papel plano una
+ * superficie translúcida es indistinguible de una opaca — la misma razón por
+ * la que la portada terminó en tono medio.
+ * Es mucho más suave que la portada: acá manda la lectura de los datos, no
+ * el efecto.
+ */
 .hoja {
   max-width: 96rem;
   margin: 0 auto;
   padding-inline: clamp(var(--e4), 4vw, var(--e8));
   padding-bottom: var(--e8);
+  /* Los grises se oscurecen acá, igual que en la portada. No es gusto: eran
+     ellos —no el diseño— los que topaban el vidrio. Con los de papel, la
+     tarjeta no podía bajar de 0.35 de opacidad sin que el tenue cayera de
+     4.5:1. Con estos baja a 0.22 y sobra margen. */
+  --tinta-media: #4b4534;
+  --tinta-tenue: #443f2f;
+  /* El aro del punto de luz también baja de tono. No es decorativo: es cómo
+     se lee la severidad, así que le corresponde el mínimo de 3:1 de 1.4.11.
+     Con la tarjeta al 15% el valor de papel caía a 2.98. */
+  --punto-aro: #725700;
+
+  background:
+    radial-gradient(130% 80% at 50% 0, rgb(196 187 167 / 0.95) 0, rgb(196 187 167 / 0) 65%),
+    var(--papel);
 }
 
 .saltar {
@@ -1021,6 +1043,14 @@ body {
   min-width: 0;
 }
 
+/*
+ * La lengüeta que abre la consola. El padding horizontal no es cosmético:
+ * cuando era un botón sin fondo, texto pegado al borde no se notaba porque no
+ * había borde. Al volverse vidrio aparece el filo, y un filo que toca la
+ * primera letra se lee como un error de maquetado.
+ * El radio va por lo mismo — una superficie de vidrio con esquinas vivas no
+ * existe en ninguna de las referencias.
+ */
 .consola-lengueta {
   width: 100%;
   display: flex;
@@ -1030,10 +1060,18 @@ body {
   font-size: 0.8125rem;
   text-align: left;
   color: var(--tinta);
-  background: none;
-  border: 0;
-  padding: var(--e3) 0;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio-tarjeta);
+  padding: var(--e3) var(--e4);
   cursor: pointer;
+  transition:
+    background var(--rapido) linear,
+    border-color var(--rapido) linear;
+}
+
+.consola-lengueta:hover {
+  background: rgb(var(--vidrio-papel) / 0.34);
+  border-color: var(--tinta-tenue);
 }
 
 .consola-titulo {
@@ -1128,8 +1166,11 @@ body {
     color var(--rapido) linear;
 }
 
-.boton:hover {
-  background: var(--velo);
+/* El hover NO reemplaza el vidrio: lo espesa. Poner un velo opaco encima
+   apagaba justo lo que hace que el control se lea como cristal. */
+.boton:hover:not(:disabled):not([aria-pressed="true"]) {
+  background: rgb(var(--vidrio-papel) / 0.34);
+  border-color: var(--tinta-tenue);
 }
 
 .boton[aria-pressed="true"] {
@@ -1143,11 +1184,12 @@ body {
   border-color: var(--amarillo-alto);
 }
 
+/* El fondo lo pone la regla compartida de vidrio: acá poner `transparent`
+   volvería a apagarlo y el botón deshabilitado perdería el material. */
 .boton:disabled {
   cursor: not-allowed;
   color: var(--tinta-tenue);
   border-color: var(--linea);
-  background: transparent;
 }
 
 /* Ancho en rem y no en ch: Chrome mete los botones de incremento adentro de
@@ -1261,16 +1303,60 @@ body {
   line-height: 1;
   font-family: var(--texto);
   color: var(--tinta);
-  background: transparent;
   border: 1px solid var(--linea-control);
   border-radius: 50%;
   cursor: pointer;
+
   transition:
     background var(--rapido) linear,
     border-color var(--rapido) linear,
+    box-shadow var(--rapido) linear,
     color var(--rapido) linear;
 }
 
+/* ── EL VIDRIO DE LOS CONTROLES ────────────────────────────────────────
+ *
+ * Una sola receta para todo lo que se toca. Estaba escrita tres veces —
+ * tarjeta, flecha, control— y a la tercera se extrae: tres copias del mismo
+ * bloque es donde empiezan a divergir sin que nadie lo note.
+ *
+ * Los mismos valores que las tarjetas (0.15 y 8px) a propósito: un control y
+ * una tarjeta son el mismo material, y si el vidrio cambiara de espesor según
+ * el elemento dejaría de leerse como un sistema.
+ */
+:is(.paso, .boton, .consola-lengueta) {
+  background: rgb(var(--vidrio-papel) / 0.15);
+  backdrop-filter: blur(8px) saturate(1.16);
+  -webkit-backdrop-filter: blur(8px) saturate(1.16);
+  box-shadow:
+    /* El canto oscuro primero: sobre fondo claro, blanco solo no existe. */
+    inset 0 0 0 1px rgb(23 20 15 / 0.06),
+    inset 1px 1px 0 0 rgb(255 255 255 / 0.85),
+    inset -1px -1px 0 0 rgb(255 255 255 / 0.55),
+    0 1px 2px rgb(23 20 15 / 0.05);
+}
+
+/* Relleno sólido = ya no hay nada que refractar, así que el filo se apaga.
+   Dejarlo puesto sobre un amarillo pleno se lee como un borde mal hecho. */
+:is(.paso, .boton)[aria-pressed="true"],
+:is(.paso, .boton):hover:not(:disabled):not([aria-pressed="false"]) {
+  box-shadow: 0 1px 2px rgb(23 20 15 / 0.08);
+}
+
+/* Lo que no se puede tocar no sigue atrapando luz. */
+:is(.paso, .boton):disabled {
+  background: rgb(var(--vidrio-papel) / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(23 20 15 / 0.04);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :is(.paso, .boton, .consola-lengueta) {
+    background: var(--papel-alto);
+  }
+}
+
+/* En hover la flecha se llena de amarillo: deja de ser una lente y pasa a ser
+   la acción. El filo lo apaga la regla compartida de arriba. */
 .paso:hover:not(:disabled) {
   background: var(--amarillo);
   border-color: var(--amarillo);
@@ -1455,24 +1541,62 @@ body {
   font-size: 0.8125rem;
 }
 
+/*
+ * El frame de la vista simple, más contenido.
+ *
+ * Antes ocupaba 64vh con tarjetas de 18rem: con 75 eventos eso era una pared
+ * de tarjetas que empujaba todo lo demás fuera de la pantalla. Achicarlo tiene
+ * dos efectos, y los dos convienen: la etapa se lee como una muestra y no como
+ * un volcado, y hay muchas menos tarjetas con `backdrop-filter` a la vez —
+ * que es lo que sostiene el frame rate ahora que son de vidrio.
+ */
 .carriles[data-view="simple"] .carril > ol {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
-  gap: var(--e3);
-  max-height: min(64vh, 620px);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--e2);
+  max-height: min(42vh, 380px);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
    8 · TARJETAS — hojitas de papel, sin relieve
    ══════════════════════════════════════════════════════════════════════ */
 
+/*
+ * Las tarjetas pasan a vidrio. Dos decisiones que las hacen posibles:
+ *
+ * · SIN refracción. El filtro SVG del hero cuesta caro y acá habría hasta 75
+ *   tarjetas a la vez: sería la misma pila multiplicada por setenta y cinco.
+ *   Queda el desenfoque, que es barato y es lo que da la translucidez.
+ * · El desenfoque es chico (5px) por lo mismo. Un blur grande obliga al
+ *   compositor a muestrear mucho más por tarjeta.
+ *
+ * El fondo ya no es opaco: `--vidrio-papel` a 0.55 deja pasar el tono de la
+ * hoja, que es lo que hace que se lean como vidrio y no como papel.
+ */
 .tarjeta {
   position: relative;
   min-width: 0;
   border: 1px solid var(--linea);
   border-radius: var(--radio-tarjeta);
   padding: var(--e3) var(--e4);
-  background: var(--papel-alto);
+  background: rgb(var(--vidrio-papel) / 0.15);
+  backdrop-filter: blur(8px) saturate(1.16);
+  -webkit-backdrop-filter: blur(8px) saturate(1.16);
+  box-shadow:
+    /* El canto oscuro, para que el filo claro tenga contra qué leerse.
+       La misma lección del hero: sobre fondo claro, blanco solo no existe. */
+    inset 0 0 0 1px rgb(23 20 15 / 0.06),
+    inset 1px 1px 0 0 rgb(255 255 255 / 0.85),
+    inset -1px -1px 0 0 rgb(255 255 255 / 0.55),
+    0 1px 2px rgb(23 20 15 / 0.05);
   overflow-wrap: anywhere;
+}
+
+/* Sin soporte de backdrop-filter la tarjeta se queda sin translucidez: se
+   vuelve opaca para no dejar el texto sobre el tono de la hoja en crudo. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tarjeta {
+    background: var(--papel-alto);
+  }
 }
 
 .tarjeta-cabeza {

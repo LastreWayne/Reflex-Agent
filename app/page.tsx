@@ -82,36 +82,49 @@ const TONO_ESTADO: Record<string, Tono> = {
 
 const TONO_SEVERIDAD: Record<string, Tono> = { high: "rojo", medium: "ambar", low: "claro" }
 
-/** Las cinco etapas, en orden. Es la fuente única de las tarjetas de la portada y de los carriles. */
+/*
+ * Las cinco etapas, en orden. Fuente única de las pestañas de la portada y de
+ * los carriles.
+ *
+ * `explica` recibe el nombre de la entidad del dominio ("estación", "mesa") en
+ * vez de decir "entidad". No es cosmético: cuando el visitante cambia de
+ * dominio y las cinco etapas quedan idénticas pero el vocabulario cambia,
+ * está VIENDO la tesis del proyecto en lugar de leerla. El motor no se enteró
+ * de que cambió el mundo.
+ *
+ * El texto es para alguien que llegó desde un link a votar, no para quien
+ * escribió el motor: nada de "primitivo", "dedup" ni "config".
+ */
 const ETAPAS = [
   {
     id: "eventos",
     titulo: "Eventos",
-    explica:
-      "Llega un cambio de estado por entidad, crudo y con su hora. Todavía nadie interpreta nada.",
+    explica: (e: string) =>
+      `Cada vez que una ${e} cambia de estado, llega un aviso con la hora. Nada más: nadie dijo todavía que eso importe.`,
   },
   {
     id: "intervalos",
     titulo: "Intervalos",
-    explica:
-      "Los eventos se vuelven tramos con duración. Es el primitivo del motor: cuánto llevó cada estado.",
+    explica: (e: string) =>
+      `Esos avisos se vuelven tiempo: cuánto lleva cada ${e} en el estado en que está. De acá sale todo lo demás.`,
   },
   {
     id: "detecciones",
     titulo: "Detecciones",
-    explica:
-      "Las reglas del dominio leen los tramos. Lo que ya se avisó se silencia por dedup y cooldown.",
+    explica: () =>
+      "Las reglas de este dominio miran esas duraciones y marcan lo que se sale de lo normal. Lo que ya se avisó, se calla.",
   },
   {
     id: "decision",
     titulo: "Decisión",
-    explica: "Claude recibe la detección con su evidencia y elige una acción del config, no del código.",
+    explica: () =>
+      "Claude ve el hallazgo con su evidencia y elige una de las acciones que este dominio permite. Puede elegir no hacer nada.",
   },
   {
     id: "accion",
     titulo: "Acción",
-    explica:
-      "La acción elegida se ejecuta: aviso al equipo de guardia, ticket, notificación al celular, o ninguna.",
+    explica: () =>
+      "Se ejecuta lo elegido: un aviso al equipo, un ticket, una notificación al celular. O nada, si eso era lo correcto.",
   },
 ] as const
 
@@ -345,7 +358,16 @@ export default function Page() {
   const config: DomainConfig | null = params ? CONFIGS[params.domain] : null
   const listo = carriles >= 5 && decisiones.every((d) => d.status !== "pendiente")
   const decididas = decisiones.filter((d) => d.status !== "pendiente").length
-  const entidad = config ? config.entity.singular : "entidad"
+  /*
+   * El fallback es la entidad del dominio POR DEFECTO, no la palabra "entidad".
+   *
+   * `params` se resuelve leyendo la URL en el navegador, así que en el render
+   * del servidor es `null`. Con "entidad" como fallback, la primera pintura
+   * mostraba la palabra genérica y recién al hidratar aparecía "estación" —
+   * un parpadeo justo en el texto cuya gracia es ser específico del dominio.
+   * Una URL sin `?domain=` ES volt, así que el servidor puede pintarlo bien.
+   */
+  const entidad = config ? config.entity.singular : CONFIGS[DOMAIN_IDS[0]].entity.singular
 
   const fase: FaseMascota = fallo
     ? "error"
@@ -635,7 +657,7 @@ export default function Page() {
               caminos={ETAPAS.map((e, i) => ({
                 id: e.id,
                 titulo: e.titulo,
-                texto: e.explica,
+                texto: e.explica(entidad),
                 encendida: carriles > i,
                 mirando: vista === "simple" && etapa === i,
                 luz: (
