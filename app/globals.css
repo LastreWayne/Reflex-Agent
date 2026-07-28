@@ -1816,17 +1816,127 @@ body {
   transition: transform 90ms linear;
 }
 
-.m-pupilas circle {
+/*
+ * EL IRIS. Antes eran dos pupilas redondas con 3.4px de recorrido: se movían
+ * tan poco que la mirada parecía fija. Ahora es una sola pupila alargada que
+ * cruza casi todo el visor —±42px— y por eso se lee como algo que REACCIONA.
+ * La transición es de 40ms, apenas por encima de un cuadro: el ojo llega antes
+ * que la cabeza, que es lo que hace un centinela de verdad.
+ */
+.m-pupilas rect {
   fill: var(--tinta);
-  transform: translate(calc(var(--lx) * 3.4px), calc(var(--ly) * 2.6px));
+}
+
+.m-pupilas {
+  transform: translate(calc(var(--lx) * 42px), calc(var(--ly) * 5px));
   transition: transform 40ms linear;
 }
 
-/* Los párpados son del color del visor: al bajar se comen la pupila. */
+/* El núcleo del iris es papel: un destello de lente dentro de la tinta. */
+.m-iris-nucleo {
+  fill: var(--papel);
+  opacity: 0.5;
+}
+
+/*
+ * EL CONTORNO DEL VISOR, encendido en amarillo.
+ *
+ * Rompe a propósito la regla de que la antena es el único amarillo del robot,
+ * y la rompe por la razón correcta: la mirada es lo que define a este
+ * personaje, así que es lo que tiene permitido encenderse. La antena dice el
+ * estado; el visor dice qué ES.
+ *
+ * El resplandor va en dos capas —cerca y lejos— por lo mismo que el canto del
+ * hero: un halo de un solo radio se lee como una calcomanía, y dos con
+ * distinta caída se leen como luz.
+ */
+.m-visor {
+  stroke: var(--amarillo);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  filter:
+    drop-shadow(0 0 4px rgb(242 194 0 / 0.75))
+    drop-shadow(0 0 13px rgb(242 194 0 / 0.45));
+}
+
+/* Apagado antes de arrancar, igual que la antena y el barrido: el agente
+   todavía no está mirando, así que el ojo no ilumina nada. */
+.mascota[data-mascota="inicio"] .m-visor {
+  stroke: var(--linea-fuerte);
+  stroke-width: 1.5;
+  filter: none;
+}
+
+/* Con el motor corriendo el ojo respira, muy despacio. Es el mismo latido
+   lento del canto del hero, no un parpadeo propio: dos pulsos distintos en la
+   misma pantalla compiten. */
+@media (prefers-reduced-motion: no-preference) {
+  .mascota[data-mascota="corriendo"] .m-visor {
+    animation: m-visor-latido 2.6s ease-in-out infinite;
+  }
+}
+
+@keyframes m-visor-latido {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgb(242 194 0 / 0.75)) drop-shadow(0 0 13px rgb(242 194 0 / 0.45));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgb(242 194 0 / 0.9)) drop-shadow(0 0 20px rgb(242 194 0 / 0.6));
+  }
+}
+
+/* En error el ojo se apaga a tinta. Esta paleta tiene un solo acento —no hay
+   rojo— así que la falla no se dice con color sino quitando la luz: un
+   centinela que falló no sigue brillando como si todo estuviera bien. */
+.mascota[data-mascota="error"] .m-visor {
+  stroke: var(--tinta);
+  stroke-width: 2;
+  filter: none;
+}
+
+/*
+ * EL BARRIDO. Una banda clara que cruza el visor sin parar. Es lo que
+ * distingue una mirada ACTIVA de un ojo pintado: aunque el cursor esté quieto,
+ * el centinela sigue rastrillando.
+ * Va recortado por la ranura del visor, así que no puede salirse de la mirada.
+ */
+.m-barrido {
+  fill: var(--papel);
+  opacity: 0.34;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .m-barrido {
+    animation: m-rastrillar 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+}
+
+@keyframes m-rastrillar {
+  0% {
+    transform: translateX(0);
+  }
+  /* La vuelta es más lenta que la ida y hay una pausa al final: un barrido
+     que va y viene a velocidad pareja se lee como un péndulo, no como algo
+     que busca. */
+  55%,
+  100% {
+    transform: translateX(250px);
+  }
+}
+
+/* Antes de arrancar no rastrilla: el agente todavía no está mirando. */
+.mascota[data-mascota="inicio"] .m-barrido {
+  animation: none;
+  opacity: 0;
+}
+
+/* El párpado es una persiana única del color del visor: al bajar se come la
+   mirada entera de un golpe. */
 .m-parpados rect {
   fill: var(--papel);
   transform: scaleY(0);
-  transform-origin: bottom;
+  transform-origin: top;
   transform-box: fill-box;
   transition: transform var(--medio) var(--salida);
 }
@@ -1835,12 +1945,18 @@ body {
   transform: scaleY(1);
 }
 
-/* La cabeza se orienta a la luz. */
+/*
+ * La cabeza se orienta a la luz, y ahora también se inclina hacia ella: un
+ * centinela que rastrea no sólo gira, se ASOMA. El giro subió de 3.2° a 5°
+ * y la transición bajó de 90ms a 70ms — más rápida que antes, pero todavía
+ * más lenta que el iris. Ese desfasaje es lo que hace que la mirada parezca
+ * llegar primero y el cuerpo seguirla.
+ */
 .m-cabeza {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  transform: rotate(calc(var(--lx) * 3.2deg));
-  transition: transform 90ms linear;
+  transform: rotate(calc(var(--lx) * 5deg)) translateX(calc(var(--lx) * 4px));
+  transition: transform 70ms linear;
 }
 
 /* Antes de arrancar la antena está apagada: aro sin núcleo, igual que

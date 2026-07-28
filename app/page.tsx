@@ -35,8 +35,16 @@ import {
  * apareciera, se filtraría al bundle público.
  */
 
-/** Pausa entre carriles, para que el pipeline se lea como un pipeline. */
-const PASO_MS = 350
+/*
+ * Pausa entre carriles, para que el pipeline se lea como un pipeline.
+ *
+ * 350ms era el tiempo de una transición, no el de una lectura: los cinco
+ * carriles pasaban en poco más de un segundo y quien miraba veía aparecer
+ * datos, no un recorrido. Esta animación es el único momento autoral de la
+ * página y lo que explica el producto sin texto — tiene que durar lo que
+ * tarda un ojo en registrar cada etapa.
+ */
+const PASO_MS = 900
 
 const SEVERIDAD: Record<string, string> = { high: "alta", medium: "media", low: "baja" }
 
@@ -233,6 +241,16 @@ export default function Page() {
       await sleep(PASO_MS)
       if (!vivo()) return
       setCarriles(4)
+      /*
+       * Esta pausa faltaba, y es la que hacía que la etapa 4 no existiera.
+       * Sin ella el loop arrancaba en el mismo tick: en modo offline
+       * `pedirDecision` devuelve al instante porque las decisiones están
+       * pregrabadas, así que `setCarriles(5)` disparaba antes de que la 4
+       * llegara a pintarse. Y si no hay detecciones en cola, el loop ni corre
+       * y el `setCarriles(5)` del final la saltaba del todo.
+       */
+      await sleep(PASO_MS)
+      if (!vivo()) return
 
       for (const detection of snap.queued) {
         const key = detection.dedupKey
@@ -243,7 +261,19 @@ export default function Page() {
           { key, detection, status: "pendiente", source, decision: null, error: null },
         ])
 
-        const { decision, error } = await pedirDecision(params, detection, snap.config)
+        /*
+         * Piso de tiempo visible para la tarjeta "pendiente".
+         *
+         * Con Claude de verdad la espera es de segundos y esto no agrega nada.
+         * En offline la decisión ya está escrita y vuelve en el mismo tick: sin
+         * este piso, la tarjeta pasa de "pendiente" a "lista" sin que nadie vea
+         * que hubo una consulta. Y esa consulta es la parte del pipeline que
+         * hay que entender.
+         */
+        const [{ decision, error }] = await Promise.all([
+          pedirDecision(params, detection, snap.config),
+          sleep(PASO_MS),
+        ])
         if (!vivo()) return
         setDecisiones((prev) =>
           prev.map((c) =>
@@ -286,7 +316,12 @@ export default function Page() {
           },
         ])
 
-        const result = await ejecutar(params, detection, decision, snap)
+        /* Mismo piso que la decisión: en modo simulado la ejecución vuelve en
+           el mismo tick y la tarjeta nunca se veía "pendiente". */
+        const [result] = await Promise.all([
+          ejecutar(params, detection, decision, snap),
+          sleep(PASO_MS),
+        ])
         if (!vivo()) return
         setAcciones((prev) =>
           prev.map((c) =>

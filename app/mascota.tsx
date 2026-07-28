@@ -110,9 +110,9 @@ export function Mascota({ fase, etapa, detalle }: MascotaProps) {
       >
         <title id="mascota-titulo">El Reflex Agent</title>
         <desc id="mascota-desc">
-          Un robot recortado en papel y tinta que gira la cabeza hacia la luz del cursor. En el
-          pecho lleva el número de la etapa que estás mirando, y en la antena el punto de luz que
-          dice en qué anda.
+          Un centinela recortado en papel y tinta. Un visor ancho barre de lado a lado siguiendo la
+          luz del cursor; en el pecho lleva el número de la etapa que estás mirando, y arriba el
+          punto de luz que dice en qué anda.
         </desc>
 
         <defs>
@@ -122,83 +122,102 @@ export function Mascota({ fase, etapa, detalle }: MascotaProps) {
             <stop className="m-lavado-borde" offset="1" />
           </radialGradient>
           <clipPath id="m-clip-cabeza">
-            <rect x="52" y="26" width="136" height="68" rx="18" />
+            <path d="M46 30 L194 30 L206 74 L184 96 L56 96 L34 74 Z" />
           </clipPath>
           <clipPath id="m-clip-cuerpo">
-            <rect x="58" y="100" width="124" height="86" rx="16" />
+            <path d="M74 106 L166 106 L182 150 L162 194 L78 194 L58 150 Z" />
+          </clipPath>
+          {/* La ranura del visor recorta el barrido: la línea no puede salirse
+              de la mirada, igual que en un sensor de verdad. */}
+          <clipPath id="m-clip-visor">
+            <path d="M52 46 L188 46 L196 72 L178 84 L62 84 L44 72 Z" />
           </clipPath>
         </defs>
 
         {/* Sombra de piso: papel hundido, plano. Se corre al lado opuesto. */}
-        <ellipse className="m-sombra-piso" cx="120" cy="216" rx="78" ry="7" />
+        <ellipse className="m-sombra-piso" cx="120" cy="214" rx="70" ry="6" />
 
-        {/* Piernas, pies, brazos y cuello: todo la misma tinta */}
+        {/*
+          NADA DE BRAZOS, PIERNAS NI PIES.
+          La versión anterior los tenía y era eso lo que la volvía un juguete:
+          un centinela imponente no se para en piecitos. Ahora la silueta es
+          una cuña que se planta — ancha arriba, angosta abajo — y los hombros
+          van barridos hacia atrás, que es la forma que lee como velocidad.
+        */}
         <g className="m-cuerpo">
-          <rect x="80" y="182" width="24" height="20" rx="5" />
-          <rect x="136" y="182" width="24" height="20" rx="5" />
-          <rect x="70" y="198" width="46" height="13" rx="6" />
-          <rect x="124" y="198" width="46" height="13" rx="6" />
-          <rect x="42" y="112" width="18" height="58" rx="9" />
-          <rect x="180" y="112" width="18" height="58" rx="9" />
-          <rect x="106" y="90" width="28" height="14" rx="5" />
+          {/* Hombreras barridas: el ángulo hacia atrás es la lectura de rapidez. */}
+          <path d="M56 108 L82 104 L74 148 L44 138 Z" />
+          <path d="M184 108 L158 104 L166 148 L196 138 Z" />
+          {/* La base: se ensancha al apoyar, sin pies. */}
+          <path d="M84 192 L156 192 L168 208 L72 208 Z" />
         </g>
 
-        {/* Torso: silueta de tinta con la ventanilla de papel en el pecho */}
+        {/* Torso: cuña de tinta con la ventanilla de papel en el pecho */}
         <g className="m-torso">
-          <rect className="m-cuerpo" x="58" y="100" width="124" height="86" rx="16" />
+          <path className="m-cuerpo" d="M74 106 L166 106 L182 150 L162 194 L78 194 L58 150 Z" />
           <g clipPath="url(#m-clip-cuerpo)">
             <ellipse
               className="m-lavado"
               cx="120"
-              cy="143"
+              cy="150"
               rx="76"
               ry="56"
               fill="url(#m-lavado-g)"
             />
           </g>
-          <rect className="m-hueco" x="86" y="118" width="68" height="44" rx="8" />
-          <text className="m-numero" x="120" y="147" textAnchor="middle">
+          <rect className="m-hueco" x="90" y="122" width="60" height="40" rx="6" />
+          <text className="m-numero" x="120" y="149" textAnchor="middle">
             {numero}
           </text>
-          <rect className="m-hueco" x="86" y="170" width="68" height="4" rx="2" />
+          {/* Tres nervaduras, no una barra: dan la sensación de chasis tenso. */}
+          <rect className="m-hueco" x="98" y="170" width="44" height="3" rx="1.5" />
+          <rect className="m-hueco" x="104" y="177" width="32" height="3" rx="1.5" />
+          <rect className="m-hueco" x="110" y="184" width="20" height="3" rx="1.5" />
         </g>
 
-        {/* Cabeza: gira un poco hacia la luz */}
+        {/* Cabeza: una visera baja y ancha que se orienta a la luz */}
         <g className="m-cabeza">
-          <rect className="m-cuerpo" x="117.5" y="14" width="5" height="16" rx="2.5" />
           {/* La antena es el punto de luz del robot: el único amarillo acá. */}
-          <circle className="m-antena-lente" cx="120" cy="9.5" r="7" />
-          <circle className="m-antena-aro" cx="120" cy="9.5" r="7" />
+          <path className="m-cuerpo" d="M117 12 L123 12 L125 32 L115 32 Z" />
+          <circle className="m-antena-lente" cx="120" cy="8" r="7" />
+          <circle className="m-antena-aro" cx="120" cy="8" r="7" />
 
-          <g className="m-cuerpo">
-            <rect x="42" y="48" width="12" height="24" rx="4" />
-            <rect x="186" y="48" width="12" height="24" rx="4" />
-            <rect x="52" y="26" width="136" height="68" rx="18" />
-          </g>
+          {/* El casco: hexágono achatado, más ancho que alto. Un centinela que
+              todo lo ve tiene la cabeza dominada por la mirada, no por el cráneo. */}
+          <path className="m-cuerpo" d="M46 30 L194 30 L206 74 L184 96 L56 96 L34 74 Z" />
           <g clipPath="url(#m-clip-cabeza)">
             <ellipse
               className="m-lavado"
               cx="120"
-              cy="60"
-              rx="82"
-              ry="48"
+              cy="62"
+              rx="88"
+              ry="44"
               fill="url(#m-lavado-g)"
             />
           </g>
 
-          {/* Visor: una banda de papel recortada en la tinta */}
-          <rect className="m-hueco" x="62" y="38" width="116" height="44" rx="14" />
+          {/* EL VISOR. Una sola ranura ancha en vez de dos ojos: la mirada
+              cubre casi todo el ancho de la cabeza, y eso es lo que dice que
+              no se le escapa nada. */}
+          <path className="m-hueco m-visor" d="M52 46 L188 46 L196 72 L178 84 L62 84 L44 72 Z" />
 
-          <g className="m-ojos">
+          <g className="m-ojos" clipPath="url(#m-clip-visor)">
+            {/* El barrido: una línea que cruza el visor sin parar. Es lo que
+                hace que la mirada se lea ACTIVA y no fija. */}
+            <rect className="m-barrido" x="-30" y="46" width="26" height="38" />
+
+            {/* El iris: una sola pupila alargada que corre a lo ancho del
+                visor persiguiendo la luz. Recorre mucho más que las pupilas
+                redondas de antes — de ahí sale la sensación de reacción. */}
             <g className="m-pupilas">
-              <circle cx="97" cy="60" r="9" />
-              <circle cx="143" cy="60" r="9" />
+              <rect x="104" y="52" width="32" height="26" rx="6" />
+              <rect className="m-iris-nucleo" x="114" y="57" width="12" height="16" rx="4" />
             </g>
-            {/* Párpados: bajan cuando el agente todavía no arrancó. Son del
-                color del visor, así que "cierran" comiéndose la pupila. */}
+
+            {/* Párpado: una persiana única que baja sobre todo el visor cuando
+                el agente todavía no arrancó. */}
             <g className="m-parpados">
-              <rect x="85" y="41" width="24" height="17" rx="6" />
-              <rect x="131" y="41" width="24" height="17" rx="6" />
+              <rect x="44" y="44" width="152" height="42" />
             </g>
           </g>
         </g>
