@@ -118,6 +118,27 @@ export interface Decision {
   message: string
 }
 
+/**
+ * Cómo llegó el agente a esa decisión: contra qué eligió y qué lo habría
+ * hecho elegir distinto.
+ *
+ * Vive SEPARADA de `Decision` a propósito. Los executors reciben `Decision` y
+ * nada más, así que este texto —que lo escribe el modelo— no tiene ningún
+ * camino hasta un issue de GitHub ni un canal de Discord. La contención es
+ * estructural: no hay filtro que alguien pueda olvidarse de actualizar.
+ */
+export interface Deliberation {
+  /** Una por cada acción del config que NO se eligió, en el orden de `config.actions`. */
+  rejected: { actionId: string; reason: string }[]
+  /** Qué habría tenido que ser distinto en la evidencia para elegir otra cosa. */
+  wouldChangeIf: string
+}
+
+export interface Verdict {
+  decision: Decision
+  deliberation: Deliberation
+}
+
 export interface EvalContext {
   intervals: Interval[]
   events: NormalizedEvent[]
@@ -137,4 +158,4 @@ export interface StateStore {
 /**
  * Igual que StateStore: el motor declara la interfaz, el adapter la implementa.
  */
-export type Decider = (detection: Detection, config: DomainConfig) => Promise<Decision>
+export type Decider = (detection: Detection, config: DomainConfig) => Promise<Verdict>

@@ -38,11 +38,29 @@ const MAX_KEY_LENGTH = 500 // dedupKey/cooldownKey = `${ruleId}:${entityId}:${is
 const MAX_REASON_LENGTH = 500 // "Una frase, para el log." (prompt.ts:29)
 const MAX_MESSAGE_LENGTH = 2000 // mensaje a una persona real, unas oraciones
 const MAX_EVIDENCE_JSON_LENGTH = 5000 // el evidence real más grande serializa a <300 chars
+const MAX_REJECTED = 8 // los configs reales declaran 3 acciones ⇒ 2 rechazos
 
 export const DecisionSchema = z.object({
   actionId: z.string().min(1).max(MAX_ID_LENGTH),
   reason: z.string().max(MAX_REASON_LENGTH),
   message: z.string().max(MAX_MESSAGE_LENGTH),
+})
+
+/**
+ * La deliberación NO viaja a /api/execute: sólo la produce /api/decide y sólo
+ * la consume la pantalla. El tope se aplica en la ruta, antes de responder,
+ * porque ahí es donde la salida del modelo entra al sistema.
+ */
+export const DeliberationSchema = z.object({
+  rejected: z
+    .array(
+      z.object({
+        actionId: z.string().min(1).max(MAX_ID_LENGTH),
+        reason: z.string().max(MAX_REASON_LENGTH),
+      }),
+    )
+    .max(MAX_REJECTED),
+  wouldChangeIf: z.string().max(MAX_REASON_LENGTH),
 })
 
 export const DetectionSchema = z.object({
