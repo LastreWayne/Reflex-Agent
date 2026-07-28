@@ -32,8 +32,15 @@ const LUZ_EN_REPOSO = { x: -0.32, y: -0.5 }
 
 interface MascotaProps {
   fase: FaseMascota
-  /** Etapa que está mirando el visor, 1–5. Se lee en el pecho del robot. */
-  etapa: number
+  /**
+   * Etapa que está mirando el visor, 1–5. Se lee en el pecho del robot.
+   *
+   * `null` cuando NO hay una etapa en foco — la vista de los cinco carriles,
+   * donde se ven todos a la vez. Es `null` y no un booleano `mostrarNumero`
+   * porque eso es lo que pasa de verdad: no es que el número esté escondido,
+   * es que ahí no existe una etapa que mostrar.
+   */
+  etapa: number | null
   /** Una línea sobre lo que está haciendo, para la placa del pie. */
   detalle: string
 }
@@ -98,7 +105,7 @@ export function Mascota({ fase, etapa, detalle }: MascotaProps) {
     }
   }, [])
 
-  const numero = `0${etapa}`.slice(-2)
+  const numero = etapa === null ? null : `0${etapa}`.slice(-2)
 
   return (
     <figure className="mascota" data-mascota={fase} ref={ref}>
@@ -111,8 +118,9 @@ export function Mascota({ fase, etapa, detalle }: MascotaProps) {
         <title id="mascota-titulo">El Reflex Agent</title>
         <desc id="mascota-desc">
           Un centinela recortado en papel y tinta. Un visor ancho barre de lado a lado siguiendo la
-          luz del cursor; en el pecho lleva el número de la etapa que estás mirando, y arriba el
-          punto de luz que dice en qué anda.
+          luz del cursor
+          {numero !== null && "; en el pecho lleva el número de la etapa que estás mirando"}, y
+          arriba el punto de luz que dice en qué anda.
         </desc>
 
         <defs>
@@ -165,10 +173,15 @@ export function Mascota({ fase, etapa, detalle }: MascotaProps) {
               fill="url(#m-lavado-g)"
             />
           </g>
+          {/* La ventanilla queda SIEMPRE, con o sin número: es un hueco de
+              papel en la silueta de tinta, igual que el visor. Sacarla dejaría
+              el pecho como un bloque macizo y el recorte del robot cambia. */}
           <rect className="m-hueco" x="90" y="122" width="60" height="40" rx="6" />
-          <text className="m-numero" x="120" y="149" textAnchor="middle">
-            {numero}
-          </text>
+          {numero !== null && (
+            <text className="m-numero" x="120" y="149" textAnchor="middle">
+              {numero}
+            </text>
+          )}
           {/* Tres nervaduras, no una barra: dan la sensación de chasis tenso. */}
           <rect className="m-hueco" x="98" y="170" width="44" height="3" rx="1.5" />
           <rect className="m-hueco" x="104" y="177" width="32" height="3" rx="1.5" />

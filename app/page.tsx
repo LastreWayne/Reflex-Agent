@@ -189,6 +189,67 @@ export default function Page() {
     setVista(parseView(window.location.search))
   }, [])
 
+  /*
+   * Posición del puntero en coordenadas de viewport, para el borde encendido
+   * de las tarjetas de decisión y acción.
+   *
+   * UN listener para toda la página, no uno por tarjeta. La referencia
+   * (`references/spotlight-card.tsx`) registra el suyo dentro de cada
+   * instancia: con diez tarjetas serían diez listeners haciendo exactamente el
+   * mismo cálculo. Las custom properties heredan, así que se escriben una vez
+   * en la raíz y todas las tarjetas las leen.
+   *
+   * Agrupado en rAF: escribir estilo en cada evento de puntero sin agrupar es
+   * como se pierden los 60fps que costó conseguir en el campo de flujo.
+   */
+  useEffect(() => {
+    let cuadro = 0
+    let x = 0
+    let y = 0
+
+    /*
+     * POR QUÉ COORDENADAS LOCALES Y NO `background-attachment: fixed`.
+     *
+     * La referencia posiciona el degradado en coordenadas de viewport y lo
+     * fija con `background-attachment: fixed`. Acá eso NO funciona: la tarjeta
+     * lleva `backdrop-filter`, y un elemento con filter/backdrop-filter/
+     * transform crea un bloque contenedor — `fixed` deja de resolverse contra
+     * el viewport y pasa a resolverse contra la tarjeta. Resultado: todas
+     * reciben el degradado en la misma posición relativa a sí mismas, se
+     * comportan idénticas, y encienden donde el cursor no está.
+     *
+     * Así que a cada tarjeta se le escribe la posición del cursor RELATIVA A
+     * ELLA. Son pocas —sólo decisión y acción llevan borde encendido— y los
+     * rects se leen todos juntos antes de escribir ningún estilo, para no
+     * alternar lectura y escritura de layout en el mismo cuadro.
+     */
+    const pintar = () => {
+      cuadro = 0
+      const tarjetas = document.querySelectorAll<HTMLElement>("[data-borde-vivo]")
+      const rects: DOMRect[] = []
+      for (const t of tarjetas) rects.push(t.getBoundingClientRect())
+      let i = 0
+      for (const t of tarjetas) {
+        const r = rects[i++]
+        if (r === undefined) continue
+        t.style.setProperty("--cx", (x - r.left).toFixed(1))
+        t.style.setProperty("--cy", (y - r.top).toFixed(1))
+      }
+    }
+
+    const mover = (e: PointerEvent) => {
+      x = e.clientX
+      y = e.clientY
+      if (cuadro === 0) cuadro = requestAnimationFrame(pintar)
+    }
+
+    window.addEventListener("pointermove", mover, { passive: true })
+    return () => {
+      window.removeEventListener("pointermove", mover)
+      if (cuadro !== 0) cancelAnimationFrame(cuadro)
+    }
+  }, [])
+
   const corridaRef = useRef(0)
   const ultimaRef = useRef<DemoParams | null>(null)
   // La vista no entra en las deps del efecto del pipeline: cambiarla no debe
@@ -527,6 +588,9 @@ export default function Page() {
         key={`dc-${c.key}`}
         className="tarjeta"
         data-card="decision"
+        /* Marca las tarjetas que llevan borde encendido: el efecto les escribe
+           la posición del cursor relativa a ellas en cada cuadro. */
+        data-borde-vivo=""
         data-status={c.status}
         data-source={c.source}
         data-entity={c.detection.entityId}
@@ -573,6 +637,7 @@ export default function Page() {
         key={`ac-${c.key}`}
         className="tarjeta"
         data-card="accion"
+        data-borde-vivo=""
         data-status={c.status}
         data-source={c.source}
         data-entity={c.entityId}
@@ -707,7 +772,9 @@ export default function Page() {
           </VidrioLiquido>
         </header>
 
-        <div className="hoja">
+        {/* La hoja pierde su ancho máximo y sus márgenes en la vista completa:
+            ahí los cinco carriles usan la pantalla de borde a borde. */}
+        <div className="hoja" data-view={vista}>
         {/* ── EL MOTOR ─────────────────────────────────────────────────── */}
         <section className="escena" id="escena" data-view={vista} aria-labelledby="escena-titulo">
           <div className="escena-cabeza">
@@ -947,14 +1014,24 @@ export default function Page() {
                 {contenidos[i]}
               </Carril>
             ))}
-          </div>
 
-          {vista === "simple" && (
-            <Mascota fase={fase} etapa={etapa + 1} detalle={detalleMascota} />
-          )}
+            {/*
+              La mascota vive DENTRO de la grilla de carriles, no al lado.
+              En la vista completa ocupa la celda del medio, entre detecciones
+              y decisión; en la simple queda debajo del único carril visible,
+              que es donde estaba antes. Una sola posición en el marcado y dos
+              ubicaciones resueltas por CSS: sacarla y volverla a poner según
+              la vista la desmontaría y perdería el seguimiento del cursor.
+            */}
+            <Mascota
+              fase={fase}
+              etapa={vista === "full" ? null : etapa + 1}
+              detalle={detalleMascota}
+            />
+          </div>
         </section>
 
-        <footer className="pie">
+        <footer className="pie" data-view={vista}>
           <p className="leyenda">
             Parámetros por URL: <code>?domain=volt|restaurant</code> · <code>&amp;seed=42</code> ·{" "}
             <code>&amp;force=1</code> · <code>&amp;offline=1</code> (todo pregrabado) o{" "}

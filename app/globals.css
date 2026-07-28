@@ -951,6 +951,70 @@ body {
   overflow-clip-margin: 24px;
 }
 
+/*
+ * VISTA COMPLETA: quién mide la pantalla, y quién se reparte lo que sobra.
+ *
+ * La altura de `100svh` vive en la HOJA, no en la escena. Puesta en la escena
+ * había que adivinar cuánto ocupaba el pie de página y siempre sobraba o
+ * faltaba una franja; puesta en la hoja, la escena pide `flex: 1` y el reparto
+ * lo hace el navegador. `svh` y no `vh` para que la barra del navegador móvil
+ * no se coma un carril al aparecer.
+ *
+ * `height` y NO `min-height` en la hoja — medido: con `min-height: 100svh` la
+ * hoja daba 6675 px de alto y la escena 6571. Un ítem `flex: 1` sólo se
+ * encoge si su padre tiene altura DEFINIDA; con `min-height` el padre crece
+ * con su contenido, así que "una fracción de lo que sobra" pasa a ser todo lo
+ * que hay y las listas vuelven a colgar fuera de la pantalla.
+ *
+ * De ahí para abajo la cadena que obliga a scrollear adentro de cada celda es
+ * `.escena { min-height: 0 }` → `.carriles { min-height: 0 }` → filas
+ * `minmax(0, 1fr)` → `.carril { overflow: hidden }`. Un ítem flex tampoco se
+ * encoge por debajo de su contenido sin ese `min-height: 0`.
+ */
+.escena[data-view="full"] {
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--e5);
+  padding-bottom: 0;
+  gap: var(--e4);
+}
+
+/* De borde a borde: la hoja suelta su ancho máximo y sus márgenes laterales.
+   El aire de los costados era espacio muerto con cinco carriles adentro. */
+.hoja[data-view="full"] {
+  max-width: none;
+  padding-inline: var(--e3);
+  padding-bottom: 0;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * El pie se pega a los carriles. Su `margin-top` de `--e8` era el hueco que
+ * quedaba entre la última tarjeta y la línea: 4.5rem de papel vacío, porque
+ * ese respiro está pensado para una página que scrollea, no para una que
+ * termina justo en el borde de la pantalla.
+ */
+.pie[data-view="full"] {
+  margin-top: 0;
+  padding-top: var(--e4);
+}
+
+/*
+ * La leyenda se despliega a lo ancho.
+ *
+ * `--medida` es el ancho de lectura cómoda (~65 caracteres) y es lo correcto
+ * para un párrafo que se lee de corrido. Este no lo es: es una referencia de
+ * parámetros que se BARRE con la vista. Atada a la medida ocupaba cuatro
+ * renglones, y cada renglón acá se lo saca a los carriles — el pie y la grilla
+ * se reparten la misma pantalla.
+ */
+.pie[data-view="full"] .leyenda {
+  max-width: none;
+  line-height: 1.5;
+}
+
 .escena-cabeza {
   text-align: center;
   display: flex;
@@ -1420,8 +1484,147 @@ body {
   align-items: start;
 }
 
+/*
+ * LA VISTA COMPLETA usa la pantalla entera, con la forma que el humano marcó
+ * en `references/new layout.png`.
+ *
+ *   ┌─────────┬────────────┬───────────────┬────────┐
+ *   │         │            │  DETECCIONES  │        │
+ *   │ EVENTOS │ INTERVALOS ├───────────────┤ ACCIÓN │
+ *   │         │            │      BOT      │        │
+ *   │         │            ├───────────────┤        │
+ *   │         │            │   DECISIÓN    │        │
+ *   └─────────┴────────────┴───────────────┴────────┘
+ *
+ * Las tres columnas laterales corren a lo alto; la del medio se parte en tres
+ * y ahí adentro detecciones y decisión corren a lo ANCHO. Ese cambio de eje no
+ * es estético: sus tarjetas son pocas y anchas —una decisión trae mensaje y
+ * motivo— así que apiladas desperdician el alto, y en fila aprovechan el
+ * espacio que la columna del medio tiene de sobra.
+ *
+ * La mascota queda literalmente en el centro del pipeline: entre lo que el
+ * motor detecta y lo que el agente decide.
+ */
 .carriles[data-view="full"] {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* Los anchos siguen al CONTENIDO, no a la simetría. Un evento es una línea
+     —mesa, estado, hora— y un intervalo tres; ambos pedían mucho menos ancho
+     del que tenían. Lo que sobra va al medio, donde las tarjetas son párrafos. */
+  grid-template-columns:
+    minmax(0, 0.6fr)
+    minmax(0, 0.72fr)
+    minmax(0, 2.15fr)
+    minmax(0, 1.05fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "eventos intervalos detecciones accion"
+    "eventos intervalos decision    accion";
+  flex: 1;
+  min-height: 0;
+
+  /*
+   * `stretch`, pisando el `align-items: start` de `.carriles`.
+   *
+   * Con `start`, un ítem de grilla se dimensiona por su CONTENIDO en vez de
+   * estirarse al alto de su fila — así que el `minmax(0, 1fr)` de las filas no
+   * lo limitaba: el carril de eventos crecía a lo que midieran 79 tarjetas y
+   * desbordaba la grilla, derramándose sobre el pie de página. Su
+   * `overflow: hidden` no recortaba nada porque el carril MISMO era así de
+   * alto. Toda la cadena de alturas estaba bien; esta línea la anulaba.
+   */
+  align-items: stretch;
+}
+
+.carriles[data-view="full"] .carril[data-lane="eventos"] {
+  grid-area: eventos;
+}
+.carriles[data-view="full"] .carril[data-lane="intervalos"] {
+  grid-area: intervalos;
+}
+.carriles[data-view="full"] .carril[data-lane="detecciones"] {
+  grid-area: detecciones;
+}
+.carriles[data-view="full"] .carril[data-lane="decision"] {
+  grid-area: decision;
+}
+.carriles[data-view="full"] .carril[data-lane="accion"] {
+  grid-area: accion;
+}
+/*
+ * LA MASCOTA PASA A SER EL FONDO de la columna del medio.
+ *
+ * Ocupa las dos filas y se queda DETRÁS de las tarjetas, que al ser de vidrio
+ * la dejan ver a través. Es el uso que el efecto estaba pidiendo: hasta ahora
+ * el vidrio difuminaba un tono plano; ahora tiene una silueta que atravesar.
+ * Sin eventos de puntero, porque es fondo y no un control.
+ */
+.carriles[data-view="full"] .mascota {
+  grid-column: 3;
+  grid-row: 1 / -1;
+  /* La mascota SÍ se centra: el `stretch` de arriba es para los carriles, que
+     tienen que llenar su fila para poder recortar adentro. */
+  align-self: center;
+  justify-self: center;
+  z-index: 0;
+  pointer-events: none;
+  width: min(100%, 34rem);
+  opacity: 0.85;
+}
+
+/* Cada carril se contiene: la lista scrollea adentro y el encabezado no se va
+   de pantalla arrastrado por el contenido. */
+.carriles[data-view="full"] .carril {
+  min-height: 0;
+  overflow: hidden;
+  /* Por encima de la mascota, que ahora es el fondo de la columna. */
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * ESTO es lo que faltaba para que 1 y 2 se limiten.
+ *
+ * El carril es un flex column con altura acotada, pero sin `flex: 1` el `<ol>`
+ * se dimensiona por su CONTENIDO y desborda el contenedor en vez de repartirse
+ * lo que sobra — por eso los 79 eventos seguían de largo hasta el pie de la
+ * pantalla mientras acción, con tres tarjetas, entraba sola.
+ */
+.carriles[data-view="full"] .carril > ol {
+  flex: 1;
+}
+
+/* Las tarjetas de eventos e intervalos se aprietan: una es UNA línea y la otra
+   tres, así que el padding de las tarjetas anchas del medio sobra acá. */
+.carriles[data-view="full"] .carril[data-lane="eventos"] .tarjeta,
+.carriles[data-view="full"] .carril[data-lane="intervalos"] .tarjeta {
+  padding: var(--e2) var(--e3);
+}
+
+.carriles[data-view="full"] .carril[data-lane="eventos"] > ol,
+.carriles[data-view="full"] .carril[data-lane="intervalos"] > ol {
+  gap: var(--e1);
+}
+
+/* ── El cambio de eje de los dos carriles del medio ──────────────────── */
+.carriles[data-view="full"] .carril[data-lane="detecciones"] > ol,
+.carriles[data-view="full"] .carril[data-lane="decision"] > ol {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(15rem, 19rem);
+  grid-template-columns: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-height: none;
+  padding-bottom: var(--e2);
+  scroll-snap-type: x proximity;
+}
+
+.carriles[data-view="full"] .carril[data-lane="detecciones"] > ol > li,
+.carriles[data-view="full"] .carril[data-lane="decision"] > ol > li {
+  scroll-snap-align: start;
+  /* Sin esto la tarjeta se estira al alto de la fila y el texto queda flotando
+     arriba de un bloque vacío. */
+  align-self: start;
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 .carriles[data-view="simple"] {
@@ -1518,8 +1721,13 @@ body {
   min-height: calc(2 * 1.55em);
 }
 
+/* La lista se queda con lo que sobre de la celda, sin un tope en vh: la grilla
+   ya reparte el alto de la pantalla y un `max-height` fijo volvería a dejar
+   aire muerto abajo, que es justo lo que este layout viene a resolver. */
 .carriles[data-view="full"] .carril > ol {
-  max-height: 56vh;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
 }
 
 /* ── Vista simple: un solo carril, con aire de verdad ─────────────────── */
@@ -1597,6 +1805,95 @@ body {
   .tarjeta {
     background: var(--papel-alto);
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   EL BORDE ENCENDIDO — sólo decisión y acción
+   ══════════════════════════════════════════════════════════════════════
+
+   Adaptado de `references/spotlight-card.tsx`. La técnica: un degradado
+   radial posicionado en coordenadas de VIEWPORT (`background-attachment:
+   fixed`) y enmascarado para que pinte únicamente el marco. `--x` y `--y` las
+   escribe un solo listener en la raíz — heredan, así que no hace falta uno por
+   tarjeta como en la referencia.
+
+   Van sólo en estos dos carriles a propósito. Eventos, intervalos y
+   detecciones son lo que el motor OBSERVA; decisión y acción son donde el
+   agente INTERVIENE. Que se enciendan las dos últimas y no las primeras dice
+   dónde deja de mirar y empieza a actuar, sin una sola palabra.
+
+   La referencia gira el matiz con la X del cursor; acá el amarillo no rota:
+   esta paleta tiene un solo acento y ese es el punto. */
+
+.tarjeta[data-card="decision"],
+.tarjeta[data-card="accion"] {
+  --halo: 220px;
+}
+
+.tarjeta[data-card="decision"]::after,
+.tarjeta[data-card="accion"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+
+  /* Coordenadas LOCALES a la tarjeta, escritas por el efecto de page.tsx.
+     `background-attachment: fixed` no sirve acá: el `backdrop-filter` de la
+     tarjeta crea un bloque contenedor y `fixed` se resuelve contra ella en vez
+     del viewport, así que todas encendían igual y en el lugar equivocado. */
+  background-image: radial-gradient(
+    var(--halo) var(--halo) at calc(var(--cx, -9999) * 1px) calc(var(--cy, -9999) * 1px),
+    var(--amarillo) 0,
+    rgb(242 194 0 / 0.35) 45%,
+    rgb(242 194 0 / 0) 75%
+  );
+
+  /* La máscara deja pasar sólo el marco: relleno completo menos el interior. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/*
+ * ACCIÓN: el mismo borde MÁS un resplandor que sale hacia afuera.
+ *
+ * La diferencia con decisión no es decorativa. Decidir es interno y
+ * reversible: el agente eligió, nada pasó todavía. Ejecutar sale al mundo —
+ * un mensaje en un canal, un issue en un repo, una notificación en un
+ * teléfono. Que la acción DERRAME luz fuera de su marco y la decisión no, es
+ * esa diferencia dicha con el material.
+ */
+.tarjeta[data-card="accion"]::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: calc(var(--radio-tarjeta) + 6px);
+  pointer-events: none;
+  z-index: -1;
+
+  /* El +6 compensa el `inset: -6px`: sin eso el resplandor quedaría corrido
+     seis píxeles respecto del borde que lo produce. */
+  background-image: radial-gradient(
+    calc(var(--halo) * 1.1) calc(var(--halo) * 1.1) at
+      calc((var(--cx, -9999) + 6) * 1px) calc((var(--cy, -9999) + 6) * 1px),
+    rgb(242 194 0 / 0.55) 0,
+    rgb(242 194 0 / 0) 70%
+  );
+  filter: blur(9px);
+}
+
+/* Una acción que falló no derrama luz: apagarse es cómo esta paleta dice
+   error, igual que el visor de la mascota. */
+.tarjeta[data-card="accion"][data-status="fallo"]::before,
+.tarjeta[data-card="accion"][data-status="omitida"]::before {
+  opacity: 0.25;
 }
 
 .tarjeta-cabeza {
@@ -1751,6 +2048,20 @@ body {
   align-items: center;
   gap: var(--e4);
   align-self: center;
+  /*
+   * Los DOS ejes, porque la mascota vive adentro de una grilla.
+   *
+   * Cuando colgaba de `.escena` —un flex en columna— `align-self: center` la
+   * centraba horizontalmente, porque ahí ese es el eje transversal. Adentro de
+   * `.carriles` el mismo `align-self` pasó a gobernar el eje vertical y el
+   * horizontal quedó sin nadie: con `justify-self: auto` y un `width`
+   * explícito, el ítem cae al arranque de la columna. Medido en la vista de un
+   * carril: 0 px de holgura a la izquierda y 902 a la derecha.
+   *
+   * En un contenedor flex `justify-self` se ignora, así que ponerlo acá no
+   * rompe nada si la mascota vuelve a mudarse.
+   */
+  justify-self: center;
   width: min(100%, 30rem);
 }
 
@@ -2229,11 +2540,35 @@ body {
     padding-top: var(--e6);
   }
 
+  /* En pantalla angosta la grilla de cuatro columnas no entra: los cinco
+     carriles se apilan y cada uno vuelve a scrollear a lo alto, incluidos los
+     dos que en escritorio corren a lo ancho. */
   .carriles[data-view="full"] {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: none;
+    min-height: 0;
+  }
+
+  .escena[data-view="full"] {
+    min-height: 0;
+  }
+
+  .carriles[data-view="full"] .carril,
+  .carriles[data-view="full"] .mascota {
+    grid-area: auto;
   }
 
   .carriles[data-view="full"] .carril > ol {
+    max-height: 42vh;
+  }
+
+  .carriles[data-view="full"] .carril[data-lane="detecciones"] > ol,
+  .carriles[data-view="full"] .carril[data-lane="decision"] > ol {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
     max-height: 42vh;
   }
 
