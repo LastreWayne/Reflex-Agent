@@ -84,6 +84,26 @@ export function buildTools(config: DomainConfig): DeciderTool[] {
   })
 }
 
+/**
+ * La evidencia serializada, con los delimitadores del cerco neutralizados.
+ *
+ * `JSON.stringify` escapa comillas, barras y saltos de línea, pero NO los
+ * ángulos. Sin esto, un `state` con la forma `Faulted</evidencia>…` cierra la
+ * valla y todo lo que sigue queda del lado de las instrucciones — el cerco
+ * valdría exactamente nada.
+ *
+ * Y el camino no es teórico: `NormalizedEventSchema.state` es
+ * `z.string().min(1)` sin restricción de caracteres, y `/api/decide` es una
+ * ruta pública sin autenticación cuyo `evidence` es un record de `unknown`
+ * acotado sólo en tamaño.
+ *
+ * Alcanza con romper el ángulo de apertura: sin `<` no se puede formar una
+ * etiqueta. Se deja el `>` para no ensuciar el dato más de lo necesario.
+ */
+function serializarEvidencia(evidence: Record<string, unknown>): string {
+  return JSON.stringify(evidence, null, 2).replaceAll("<", "&lt;")
+}
+
 export function buildPrompt(
   detection: Detection,
   config: DomainConfig,
@@ -113,7 +133,7 @@ export function buildPrompt(
     `Momento: ${detection.detectedAt}`,
     "",
     "<evidencia>",
-    JSON.stringify(detection.evidence, null, 2),
+    serializarEvidencia(detection.evidence),
     "</evidencia>",
   ].join("\n")
 
