@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import type { ExecutionResult } from "../adapters/executors/index.js"
-import type { Decision, Detection, DomainConfig } from "../engine/schema.js"
+import type { Decision, Deliberation, Detection, DomainConfig, Verdict } from "../engine/schema.js"
 import { CONFIGS, DOMAIN_IDS } from "./domains.js"
+import { Expediente } from "./expediente.js"
 import { FondoFlujo } from "./fondo-flujo.js"
 import { Mascota, type FaseMascota } from "./mascota.js"
 import { PestanasDock } from "./pestanas-dock.js"
 import { VidrioLiquido } from "./vidrio-liquido.js"
 import {
+  buildBallot,
+  buildFunnel,
   buildRun,
   findAction,
   formatClock,
@@ -141,7 +144,7 @@ interface DecisionCard {
   detection: Detection
   status: DecisionStatus
   source: "claude" | "pregrabada"
-  decision: Decision | null
+  verdict: Verdict | null
   error: string | null
 }
 
@@ -181,6 +184,11 @@ export default function Page() {
   const [controlesAbiertos, setControlesAbiertos] = useState(false)
   /** Qué pestaña abrió un TOQUE. El puntero y el teclado los resuelve el CSS. */
   const [pestanaAbierta, setPestanaAbierta] = useState<string | null>(null)
+
+  /** Qué caso muestra el expediente, 0-2. */
+  const [casoActivo, setCasoActivo] = useState(0)
+  /** Al primer toque en la regleta manda la persona, igual que con las flechas. */
+  const [casoDeLaPersona, setCasoDeLaPersona] = useState(false)
 
   // Los params se leen de la URL recién montado el componente: en el render
   // del servidor no hay `window`, y leerlo antes daría un mismatch.
@@ -280,6 +288,8 @@ export default function Page() {
     setEtapa(0)
     setSentido("adelante")
     setConduceLaPersona(false)
+    setCasoActivo(0)
+    setCasoDeLaPersona(false)
 
     void (async () => {
       let snap: RunSnapshot
@@ -319,7 +329,7 @@ export default function Page() {
 
         setDecisiones((prev) => [
           ...prev,
-          { key, detection, status: "pendiente", source, decision: null, error: null },
+          { key, detection, status: "pendiente", source, verdict: null, error: null },
         ])
 
         /*
@@ -331,21 +341,19 @@ export default function Page() {
          * que hubo una consulta. Y esa consulta es la parte del pipeline que
          * hay que entender.
          */
-        const [{ decision, error }] = await Promise.all([
+        const [{ verdict, error }] = await Promise.all([
           pedirDecision(params, detection, snap.config),
           sleep(PASO_MS),
         ])
         if (!vivo()) return
         setDecisiones((prev) =>
           prev.map((c) =>
-            c.key === key
-              ? { ...c, status: decision ? "lista" : "error", decision, error }
-              : c,
+            c.key === key ? { ...c, status: verdict ? "lista" : "error", verdict, error } : c,
           ),
         )
         setCarriles(5)
 
-        if (!decision) {
+        if (!verdict) {
           setAcciones((prev) => [
             ...prev,
             {
@@ -362,13 +370,13 @@ export default function Page() {
           continue
         }
 
-        const action = findAction(snap.config, decision.actionId)
+        const action = findAction(snap.config, verdict.decision.actionId)
         setAcciones((prev) => [
           ...prev,
           {
             key,
             entityId: detection.entityId,
-            actionId: decision.actionId,
+            actionId: verdict.decision.actionId,
             actionType: action?.type ?? "desconocida",
             actionDescription: action?.description ?? "La acción elegida no existe en el config.",
             status: "pendiente",
@@ -380,7 +388,7 @@ export default function Page() {
         /* Mismo piso que la decisión: en modo simulado la ejecución vuelve en
            el mismo tick y la tarjeta nunca se veía "pendiente". */
         const [result] = await Promise.all([
-          ejecutar(params, detection, decision, snap),
+          ejecutar(params, detection, verdict.decision, snap),
           sleep(PASO_MS),
         ])
         if (!vivo()) return
@@ -402,6 +410,12 @@ export default function Page() {
     setSentido("adelante")
     setEtapa(carriles - 1)
   }, [carriles, conduceLaPersona])
+
+  // El expediente muestra el caso más nuevo hasta que alguien toca la regleta.
+  useEffect(() => {
+    if (casoDeLaPersona || decisiones.length === 0) return
+    setCasoActivo(decisiones.length - 1)
+  }, [decisiones.length, casoDeLaPersona])
 
   // La vista viaja en la URL para que el link se pueda compartir tal cual se ve.
   useEffect(() => {
@@ -464,6 +478,34 @@ export default function Page() {
    * Una URL sin `?domain=` ES volt, así que el servidor puede pintarlo bien.
    */
   const entidad = config ? config.entity.singular : CONFIGS[DOMAIN_IDS[0]].entity.singular
+
+  const acto = etapa >= 3 ? "expediente" : "recorrido"
+  const enEscena = decisiones[casoActivo] ?? null
+  const accionEnEscena = acciones.find((a) => a.key === enEscena?.key) ?? null
+
+  const casoEnEscena =
+    enEscena && snapshot
+      ? {
+          entityId: enEscena.detection.entityId,
+          entityLabel: snapshot.config.entity.singular,
+          ruleId: enEscena.detection.ruleId,
+          ruleDescription:
+            snapshot.classified.find((c) => c.detection === enEscena.detection)
+              ?.ruleDescription ?? enEscena.detection.ruleId,
+          severidad: SEVERIDAD[enEscena.detection.severity] ?? enEscena.detection.severity,
+          evidencia: formatEvidence(enEscena.detection.evidence),
+        }
+      : null
+
+  const boletaEnEscena = snapshot ? buildBallot(snapshot.config, enEscena?.verdict ?? null) : []
+
+  const consecuenciaEnEscena = accionEnEscena
+    ? {
+        status: accionEnEscena.status,
+        detail: accionEnEscena.detail,
+        source: accionEnEscena.source,
+      }
+    : null
 
   const fase: FaseMascota = fallo
     ? "error"
@@ -619,14 +661,20 @@ export default function Page() {
             No se pudo decidir: {c.error}
           </p>
         )}
-        {c.decision && (
+        {c.verdict && (
           <dl>
             <dt>acción</dt>
-            <dd>{c.decision.actionId}</dd>
+            <dd>{c.verdict.decision.actionId}</dd>
             <dt>motivo</dt>
-            <dd className="dd-texto">{c.decision.reason}</dd>
+            <dd className="dd-texto">{c.verdict.decision.reason}</dd>
             <dt>mensaje</dt>
-            <dd className="dd-texto">{c.decision.message}</dd>
+            <dd className="dd-texto">{c.verdict.decision.message}</dd>
+            {/* La vista completa es la técnica: la deliberación se resume en
+                una línea. La boleta entera vive en el expediente. */}
+            <dt>descartó</dt>
+            <dd className="dd-texto">
+              {c.verdict.deliberation.rejected.map((r) => r.actionId).join(", ")}
+            </dd>
           </dl>
         )}
       </li>
@@ -974,33 +1022,21 @@ export default function Page() {
               </button>
             </div>
 
-            <div className="selector-vista" role="group" aria-label="Vista del pipeline">
-              <span className="selector-rotulo" aria-hidden="true">
-                Vista
-              </span>
+            {vista === "full" && (
               <button
                 type="button"
                 className="boton"
                 data-action="vista-simple"
-                aria-pressed={vista === "simple"}
                 onClick={() => setVista("simple")}
               >
-                Un carril
+                ← Volver al recorrido
               </button>
-              <button
-                type="button"
-                className="boton"
-                data-action="vista-completa"
-                aria-pressed={vista === "full"}
-                onClick={() => setVista("full")}
-              >
-                Los cinco
-              </button>
-            </div>
+            )}
           </div>
 
-          <div className="carriles" data-view={vista} data-sentido={sentido}>
-            {ETAPAS.map((e, i) => (
+          <div className="carriles" data-view={vista} data-sentido={sentido} data-acto={acto}>
+            {/* ACTO I — los carriles 1-3, tal como estaban. */}
+            {ETAPAS.slice(0, 3).map((e, i) => (
               <Carril
                 key={e.id}
                 id={e.id}
@@ -1015,19 +1051,60 @@ export default function Page() {
               </Carril>
             ))}
 
-            {/*
-              La mascota vive DENTRO de la grilla de carriles, no al lado.
-              En la vista completa ocupa la celda del medio, entre detecciones
-              y decisión; en la simple queda debajo del único carril visible,
-              que es donde estaba antes. Una sola posición en el marcado y dos
-              ubicaciones resueltas por CSS: sacarla y volverla a poner según
-              la vista la desmontaría y perdería el seguimiento del cursor.
-            */}
-            <Mascota
-              fase={fase}
-              etapa={vista === "full" ? null : etapa + 1}
-              detalle={detalleMascota}
-            />
+            {/* ACTO II — las etapas 4 y 5 comparten escenario. En la vista
+                completa siguen siendo dos carriles; el expediente es la forma
+                de la vista simple. */}
+            {vista === "full" ? (
+              ETAPAS.slice(3).map((e, i) => (
+                <Carril
+                  key={e.id}
+                  id={e.id}
+                  orden={i + 4}
+                  titulo={e.titulo}
+                  descripcion={descripciones[i + 3] ?? ""}
+                  total={totales[i + 3] ?? 0}
+                  activo={carriles >= i + 4}
+                  visible
+                >
+                  {contenidos[i + 3]}
+                </Carril>
+              ))
+            ) : (
+              <div className="escenario" data-visible={etapa >= 3 ? "si" : "no"}>
+                {snapshot && (
+                  <Expediente
+                    funnel={buildFunnel(snapshot)}
+                    caso={casoEnEscena}
+                    ballot={boletaEnEscena}
+                    wouldChangeIf={enEscena?.verdict?.deliberation.wouldChangeIf ?? null}
+                    error={enEscena?.error ?? null}
+                    consecuencia={consecuenciaEnEscena}
+                    casos={decisiones.map((d, i) => ({
+                      key: d.key,
+                      activo: i === casoActivo,
+                      onIr: () => {
+                        setCasoActivo(i)
+                        setCasoDeLaPersona(true)
+                      },
+                    }))}
+                  >
+                    {/* ACTO III — recién acá se ofrece la salida. */}
+                    {listo && (
+                      <button
+                        type="button"
+                        className="boton boton-epilogo"
+                        data-action="vista-completa"
+                        onClick={() => setVista("full")}
+                      >
+                        Ver el recorrido completo →
+                      </button>
+                    )}
+                  </Expediente>
+                )}
+              </div>
+            )}
+
+            <Mascota fase={fase} etapa={vista === "full" ? null : etapa + 1} detalle={detalleMascota} />
           </div>
         </section>
 
@@ -1145,9 +1222,9 @@ async function pedirDecision(
   params: DemoParams,
   detection: Detection,
   config: DomainConfig,
-): Promise<{ decision: Decision | null; error: string | null }> {
+): Promise<{ verdict: Verdict | null; error: string | null }> {
   if (params.offline !== "off") {
-    return { decision: offlineDecision(params.domain, detection, config), error: null }
+    return { verdict: offlineDecision(params.domain, detection, config), error: null }
   }
 
   try {
@@ -1156,13 +1233,20 @@ async function pedirDecision(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ domain: params.domain, detection }),
     })
-    const body = (await response.json()) as { decision?: Decision; error?: string }
-    if (!response.ok || !body.decision) {
-      return { decision: null, error: body.error ?? `HTTP ${response.status}` }
+    const body = (await response.json()) as {
+      decision?: Decision
+      deliberation?: Deliberation
+      error?: string
     }
-    return { decision: body.decision, error: null }
+    if (!response.ok || !body.decision || !body.deliberation) {
+      return { verdict: null, error: body.error ?? `HTTP ${response.status}` }
+    }
+    return {
+      verdict: { decision: body.decision, deliberation: body.deliberation },
+      error: null,
+    }
   } catch (error) {
-    return { decision: null, error: (error as Error).message }
+    return { verdict: null, error: (error as Error).message }
   }
 }
 
