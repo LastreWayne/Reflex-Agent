@@ -25,7 +25,7 @@ Proyecto personal que además compite en el carril de Automatizaciones y Agentes
 ```
 /engine          ← puro: sin I/O, sin red, sin APIs de Node
   schema.ts        Zod: DomainConfig, NormalizedEvent, Interval, Detection, Decision
-  normalizer.ts    entrada cruda → NormalizedEvent[]
+  normalizer.ts    entrada cruda → { events, errors } (tolera entradas inválidas)
   intervals.ts     NormalizedEvent[] → Interval[]
   detector.ts      Interval[] + rules → Detection[]
   rules/           duration-in-state · duration-vs-baseline · absence · frequency

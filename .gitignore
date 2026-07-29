@@ -29,9 +29,19 @@ yarn-error.log*
 # Editores / SO
 .DS_Store
 Thumbs.db
+desktop.ini
 .idea/
 *.swp
 
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Fotos de verificación (se regeneran con docs/design/mirar.mjs)
+docs/design/fotos/
+
+# Impeccable live mode. `config.json` SÍ se versiona: es config de proyecto y
+# evita rehacer el setup. El journal de sesiones y los recibos son estado
+# local de recuperación de una corrida concreta, no fuente.
+.impeccable/live/sessions/
+.impeccable/live/accept-receipts/

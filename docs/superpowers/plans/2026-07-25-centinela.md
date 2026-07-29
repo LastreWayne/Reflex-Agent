@@ -25,7 +25,7 @@
 ```
 /engine
   schema.ts            Zod + tipos derivados. Nadie define tipos de dominio fuera de acá.
-  normalizer.ts        entrada cruda → NormalizedEvent[] validado y ordenado
+  normalizer.ts        entrada cruda → { events ordenados, errors por entrada descartada }
   intervals.ts         NormalizedEvent[] → Interval[]
   detector.ts          orquesta los evaluadores + supresión (dedup y cooldown)
   rules/
@@ -308,6 +308,22 @@ export interface Detection {
   cooldownKey: string
 }
 
+export interface NormalizeError {
+  /** Posición en el array crudo, antes de ordenar. */
+  index: number
+  /** `null` cuando la entrada no traía un entityId usable. */
+  entityId: string | null
+  /** Campos que fallaron. Vacío si la entrada entera es inválida (no era un objeto). */
+  fields: string[]
+  /** Mensaje legible, listo para mostrar. */
+  message: string
+}
+
+export interface NormalizeResult {
+  events: NormalizedEvent[]
+  errors: NormalizeError[]
+}
+
 export interface Decision {
   actionId: string
   reason: string
@@ -342,8 +358,10 @@ git commit -m "feat(engine): contrato de datos con Zod"
 - Test: `engine/normalizer.test.ts`
 
 **Interfaces:**
-- Consumes: `NormalizedEventSchema`, `NormalizedEvent` de `engine/schema.ts`.
-- Produces: `normalize(raw: unknown[]): NormalizedEvent[]` — valida cada entrada y devuelve la lista **ordenada ascendente por timestamp**. Lanza `ZodError` si alguna entrada es inválida.
+- Consumes: `NormalizedEventSchema`, `NormalizedEvent`, `NormalizeError`, `NormalizeResult` de `engine/schema.ts`.
+- Produces: `normalize(raw: unknown[]): NormalizeResult` — valida cada entrada **por separado** y devuelve `{ events, errors }`: los válidos **ordenados ascendente por timestamp**, más un `NormalizeError` por cada entrada descartada. **No lanza.**
+
+> **Contrato revisado el 2026-07-26**, después de que la Task 2 shipeara. El original era `normalize(raw): NormalizedEvent[]` y lanzaba `ZodError` en la primera entrada inválida — una entrada mala descartaba el lote entero. Como `normalize()` es la costura de integración con OCPP para el uso real en VOLT (donde un cargador con firmware viejo no puede tumbar el lote), pasó a tolerante-con-reporte. Los bloques de código de abajo reflejan lo shipeado.
 
 Fuera de alcance: mapeo de campos configurable para webhooks de terceros. Hoy la entrada ya viene con la forma del schema; el mapeo entra después sin tocar a los consumidores.
 
@@ -357,26 +375,45 @@ import { normalize } from "./normalizer.js"
 
 describe("normalize", () => {
   it("ordena los eventos por timestamp ascendente", () => {
-    const result = normalize([
+    const { events } = normalize([
       { entityId: "A", timestamp: "2026-07-25T10:05:00.000Z", state: "Charging" },
       { entityId: "A", timestamp: "2026-07-25T10:00:00.000Z", state: "Available" },
     ])
-    expect(result.map((e) => e.state)).toEqual(["Available", "Charging"])
+    expect(events.map((e) => e.state)).toEqual(["Available", "Charging"])
   })
 
   it("conserva la metadata", () => {
-    const result = normalize([
+    const { events } = normalize([
       { entityId: "A", timestamp: "2026-07-25T10:00:00.000Z", state: "Charging", metadata: { zone: "norte" } },
     ])
-    expect(result[0]!.metadata).toEqual({ zone: "norte" })
+    expect(events[0]!.metadata).toEqual({ zone: "norte" })
   })
 
-  it("lanza si un evento es inválido", () => {
-    expect(() => normalize([{ entityId: "A", state: "Charging" }])).toThrow()
+  it("devuelve ambas listas vacías para entrada vacía", () => {
+    expect(normalize([])).toEqual({ events: [], errors: [] })
   })
 
-  it("devuelve lista vacía para entrada vacía", () => {
-    expect(normalize([])).toEqual([])
+  it("descarta las entradas inválidas y devuelve el resto", () => {
+    const { events, errors } = normalize([
+      { entityId: "EVC-02", timestamp: "2026-07-25T10:05:00.000Z", state: "Charging" },
+      { entityId: "EVC-09", timestamp: "ayer por la tarde", state: "Faulted" },
+      { entityId: "EVC-01", timestamp: "2026-07-25T10:00:00.000Z", state: "Available" },
+    ])
+
+    expect(events.map((e) => e.entityId)).toEqual(["EVC-01", "EVC-02"])
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatchObject({
+      index: 1,
+      entityId: "EVC-09",
+      fields: ["timestamp"],
+    })
+  })
+
+  it("deja entityId en null y fields vacío si la entrada no es un objeto", () => {
+    const { events, errors } = normalize(["esto no es un evento"])
+
+    expect(events).toEqual([])
+    expect(errors[0]).toMatchObject({ index: 0, entityId: null, fields: [] })
   })
 })
 ```
@@ -391,12 +428,43 @@ Expected: FAIL — no existe `engine/normalizer.ts`.
 `engine/normalizer.ts`:
 
 ```ts
-import { NormalizedEventSchema, type NormalizedEvent } from "./schema.js"
+import { z } from "zod"
+import {
+  NormalizedEventSchema,
+  type NormalizedEvent,
+  type NormalizeError,
+  type NormalizeResult,
+} from "./schema.js"
 
-export function normalize(raw: unknown[]): NormalizedEvent[] {
-  return raw
-    .map((entry) => NormalizedEventSchema.parse(entry))
-    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+const EntityIdProbe = z.object({ entityId: z.string().min(1) })
+
+export function normalize(raw: unknown[]): NormalizeResult {
+  const events: NormalizedEvent[] = []
+  const errors: NormalizeError[] = []
+
+  for (const [index, entry] of raw.entries()) {
+    const result = NormalizedEventSchema.safeParse(entry)
+
+    if (result.success) {
+      events.push(result.data)
+      continue
+    }
+
+    const probe = EntityIdProbe.safeParse(entry)
+
+    errors.push({
+      index,
+      entityId: probe.success ? probe.data.entityId : null,
+      fields: result.error.issues
+        .map((issue) => issue.path.join("."))
+        .filter((path) => path !== ""),
+      message: z.prettifyError(result.error),
+    })
+  }
+
+  events.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+
+  return { events, errors }
 }
 ```
 
@@ -852,7 +920,8 @@ git commit -m "feat(engine): regla absence_of_events"
 - Cuenta **intervalos que comenzaron** en `toState` dentro de `[now - windowMs, now]`. Agrupa por `entityId`, o por el campo de metadata que indique `groupBy`.
 - Cuando hay `groupBy`, el `entityId` de la detección es el valor del grupo (ej. `"norte"`), no una entidad individual — es una detección sobre el grupo.
 - Entradas cuyo `groupBy` no está presente en la metadata se ignoran.
-- `dedupKey` = `` `${rule.id}:${group}:${windowStartIso}` ``; `evidence` = `{ count, threshold, windowMs, groupBy }`.
+- `dedupKey` = `` `${rule.id}:${group}:${latestStartedAt}` ``, donde `latestStartedAt` es el `startedAt` más reciente entre los intervalos contados para ese grupo. **Anclado al dato, no al reloj**: si estuviera anclado a la ventana (derivada de `ctx.now`), la clave cambiaría en cada tick de evaluación, el dedup no suprimiría nada y el `Map` del store crecería un entry por tick. Sus dos reglas hermanas anclan igual: `interval.startedAt` una, `lastSeenAt` la otra.
+- `cooldownKey` = `` `${rule.id}:${group}` ``; `evidence` = `{ count, threshold, windowMs, groupBy }`.
 
 - [ ] **Step 1: Escribir el test que falla**
 
@@ -956,9 +1025,11 @@ type FrequencyRule = Extract<Rule, { type: "frequency_in_window" }>
 
 export function evaluateFrequencyInWindow(rule: FrequencyRule, ctx: EvalContext): Detection[] {
   const windowStart = ctx.now.getTime() - rule.windowMs
-  const windowStartIso = new Date(windowStart).toISOString()
 
-  const counts = new Map<string, number>()
+  // Se guarda el startedAt más reciente por grupo, no solo el conteo: es lo que
+  // ancla el dedupKey al dato en vez de al reloj. La comparación es explícita
+  // para no depender de que ctx.intervals venga ordenado.
+  const groups = new Map<string, { count: number; latestStartedAt: string }>()
 
   for (const interval of ctx.intervals) {
     if (interval.state !== rule.toState) continue
@@ -973,11 +1044,19 @@ export function evaluateFrequencyInWindow(rule: FrequencyRule, ctx: EvalContext)
       group = interval.entityId
     }
 
-    counts.set(group, (counts.get(group) ?? 0) + 1)
+    const bucket = groups.get(group)
+    if (!bucket) {
+      groups.set(group, { count: 1, latestStartedAt: interval.startedAt })
+    } else {
+      bucket.count += 1
+      if (Date.parse(interval.startedAt) > Date.parse(bucket.latestStartedAt)) {
+        bucket.latestStartedAt = interval.startedAt
+      }
+    }
   }
 
   const detections: Detection[] = []
-  for (const [group, count] of counts) {
+  for (const [group, { count, latestStartedAt }] of groups) {
     if (count < rule.count) continue
     detections.push({
       ruleId: rule.id,
@@ -990,7 +1069,7 @@ export function evaluateFrequencyInWindow(rule: FrequencyRule, ctx: EvalContext)
         windowMs: rule.windowMs,
         groupBy: rule.groupBy ?? null,
       },
-      dedupKey: `${rule.id}:${group}:${windowStartIso}`,
+      dedupKey: `${rule.id}:${group}:${latestStartedAt}`,
       cooldownKey: `${rule.id}:${group}`,
     })
   }
@@ -1192,6 +1271,8 @@ export function evaluateDurationVsBaseline(rule: BaselineRule, ctx: EvalContext)
 
 Run: `npx vitest run engine/rules/duration-vs-baseline.test.ts`
 Expected: PASS, 5 tests.
+
+> **Shipeado: 7 tests.** A los 5 dictados arriba se sumaron una aserción de borde (`durationMs === baselineMs` no dispara) y, en la review, un test que fija que el `dedupKey` no depende del reloj. Ambos verificados load-bearing.
 
 - [ ] **Step 5: Escribir el registry**
 
@@ -1398,6 +1479,8 @@ export function suppress(
 Run: `npx vitest run engine/detector.test.ts`
 Expected: PASS, 8 tests.
 
+> **Ojo:** el bloque de test dictado en el Step 6 contiene 7 `it(...)`, no 8. El octavo que shipeó es una aserción de borde agregada (`elapsed === cooldownMs` no suprime), así que el conteo coincide por casualidad. Si reescribís este step, contá los `it`.
+
 - [ ] **Step 11: Escribir los dos configs**
 
 `configs/volt.json`:
@@ -1455,7 +1538,7 @@ Expected: PASS, 8 tests.
 import { describe, expect, it } from "vitest"
 import { detect } from "./detector.js"
 import { normalize } from "./normalizer.js"
-import { DomainConfigSchema, type NormalizedEvent } from "./schema.js"
+import { DomainConfigSchema } from "./schema.js"
 import voltRaw from "../configs/volt.json" with { type: "json" }
 import restaurantRaw from "../configs/restaurant.json" with { type: "json" }
 
@@ -1469,7 +1552,7 @@ describe("el mismo motor sobre dos dominios distintos", () => {
 
   it("detecta una estación atascada en falla usando la config de VOLT", () => {
     const config = DomainConfigSchema.parse(voltRaw)
-    const events = normalize([
+    const { events } = normalize([
       { entityId: "EVC-04", timestamp: "2026-07-25T19:30:00.000Z", state: "Available", metadata: { zone: "norte" } },
       { entityId: "EVC-04", timestamp: "2026-07-25T19:45:00.000Z", state: "Faulted", metadata: { zone: "norte" } },
     ] satisfies unknown[])
@@ -1480,7 +1563,7 @@ describe("el mismo motor sobre dos dominios distintos", () => {
 
   it("detecta un no-show usando la config del restaurante — misma función", () => {
     const config = DomainConfigSchema.parse(restaurantRaw)
-    const events = normalize([
+    const { events } = normalize([
       { entityId: "mesa-7", timestamp: "2026-07-25T19:00:00.000Z", state: "Libre" },
       { entityId: "mesa-7", timestamp: "2026-07-25T19:40:00.000Z", state: "Reservada" },
     ] satisfies unknown[])
@@ -1489,17 +1572,19 @@ describe("el mismo motor sobre dos dominios distintos", () => {
     expect(ids).toContain("no-show")
   })
 
-  it("cada config solo dispara sus propias reglas", () => {
+  it("cada config ve lo suyo en el mismo stream de eventos", () => {
     const volt = DomainConfigSchema.parse(voltRaw)
     const restaurant = DomainConfigSchema.parse(restaurantRaw)
-    const events: NormalizedEvent[] = normalize([
+    const { events, errors } = normalize([
       { entityId: "mesa-7", timestamp: "2026-07-25T19:40:00.000Z", state: "Reservada" },
     ] satisfies unknown[])
+    expect(errors).toEqual([])
 
-    // El estado "Reservada" existe en ambos dominios, pero solo el restaurante
-    // tiene una regla que lo vigile.
-    expect(detect(events, restaurant, NOW).map((d) => d.ruleId)).toContain("no-show")
-    expect(detect(events, volt, NOW).filter((d) => d.ruleId === "no-show")).toEqual([])
+    // Mismo stream, dos configs. El restaurante ve una reserva sin check-in
+    // (no-show, 20 min > 15); VOLT ve una entidad sin heartbeat (offline,
+    // 20 min > 5). Cada motor produce exactamente la detección de SU dominio.
+    expect(detect(events, restaurant, NOW).map((d) => d.ruleId)).toEqual(["no-show"])
+    expect(detect(events, volt, NOW).map((d) => d.ruleId)).toEqual(["offline"])
   })
 })
 ```
@@ -2176,9 +2261,13 @@ export async function execute(
 
   const post = async (url: string, init: RequestInit): Promise<ExecutionResult> => {
     const response = await fetchImpl(url, init)
+    // Solo el host, NUNCA la URL completa: el path es donde vive el secreto.
+    // Un webhook de Discord resuelto es una credencial portadora, y `detail`
+    // se renderiza en el dashboard público.
+    const host = hostOf(url)
     return response.ok
-      ? { ok: true, detail: `POST ${url} → ${response.status}` }
-      : { ok: false, detail: `POST ${url} falló con ${response.status}` }
+      ? { ok: true, detail: `POST ${host} → ${response.status}` }
+      : { ok: false, detail: `POST ${host} falló con ${response.status}` }
   }
 
   switch (action.type) {
@@ -2460,22 +2549,53 @@ export async function POST(request: Request) {
 `app/api/execute/route.ts`:
 
 ```ts
+import { z } from "zod"
 import { execute } from "../../../adapters/executors/index.js"
-import { ActionSchema } from "../../../engine/schema.js"
+import { DomainConfigSchema, SeveritySchema } from "../../../engine/schema.js"
+import voltRaw from "../../../configs/volt.json" with { type: "json" }
+import restaurantRaw from "../../../configs/restaurant.json" with { type: "json" }
+
+const CONFIGS = {
+  volt: DomainConfigSchema.parse(voltRaw),
+  restaurant: DomainConfigSchema.parse(restaurantRaw),
+}
+
+const BodySchema = z.object({
+  domain: z.enum(["volt", "restaurant"]),
+  actionId: z.string().min(1),
+  decision: z.object({
+    actionId: z.string().min(1),
+    reason: z.string(),
+    message: z.string(),
+  }),
+  detection: z.object({
+    ruleId: z.string().min(1),
+    entityId: z.string().min(1),
+    detectedAt: z.string(),
+    severity: SeveritySchema,
+    evidence: z.record(z.string(), z.unknown()),
+    dedupKey: z.string(),
+    cooldownKey: z.string(),
+  }),
+})
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as {
-    action: unknown
-    decision: unknown
-    detection: unknown
+  const parsed = BodySchema.safeParse(await request.json())
+  if (!parsed.success) {
+    return Response.json({ error: "request inválido" }, { status: 400 })
   }
-  const action = ActionSchema.parse(body.action)
-  const result = await execute(
-    action,
-    body.decision as never,
-    body.detection as never,
-    process.env,
-  )
+  const { domain, actionId, decision, detection } = parsed.data
+
+  // La acción se resuelve en el SERVIDOR desde el config. El cliente manda solo
+  // un id: nunca puede elegir el destino del POST ni tocar actions[].config.
+  // Aceptar el objeto `action` desde el navegador sería SSRF en una URL pública,
+  // porque resolveEnv deja pasar sin tocar cualquier string sin prefijo `env:`.
+  const action = CONFIGS[domain].actions.find((a) => a.id === actionId)
+  if (!action) {
+    return Response.json({ error: "acción desconocida" }, { status: 400 })
+  }
+
+  const result = await execute(action, decision, detection, process.env)
   return Response.json({ result })
 }
 ```

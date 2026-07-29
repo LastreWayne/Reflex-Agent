@@ -1,0 +1,3008 @@
+/*
+ * Reflex Agent — papel, tinta y un amarillo.
+ *
+ * La dirección vive en DESIGN.md; esta hoja la construye. Un marco de vidrio
+ * embutido sobre un campo de líneas de flujo, un serif de display a escala
+ * enorme contra un cuerpo diminuto, y cinco pestañas mínimas abajo que se
+ * abren al pasar por encima.
+ *
+ * Reemplaza al mundo de señalética industrial esmaltada: no queda una chapa,
+ * un remache, un relieve ni un grano. Si volvés a necesitar uno, revisá
+ * DESIGN.md antes — están prohibidos por contrato.
+ *
+ * MODO CLARO ÚNICAMENTE. El modo oscuro se sacó por pedido del humano: no hay
+ * tokens `--d-*`, no hay rama de `prefers-color-scheme`, no hay interruptor.
+ *
+ * TODO el color y el ritmo viven en el bloque de tokens de acá abajo. Los
+ * ratios de contraste —incluido el del texto sobre vidrio en el PEOR momento
+ * del fondo animado— están medidos en `docs/design/contraste.mjs`
+ * (`node docs/design/contraste.mjs`), no estimados a ojo.
+ *
+ * El estado vive en el marcado (data-lane, data-status, data-severity,
+ * data-source, data-open, data-lamp, data-view, data-fase…); esta hoja lo lee,
+ * nunca lo re-deriva.
+ */
+
+/* ══════════════════════════════════════════════════════════════════════
+   1 · TOKENS
+
+   El amarillo puro NO pasa contraste sobre papel (1.46:1). Por eso hay tres
+   amarillos y cada uno tiene un trabajo:
+
+     --amarillo         relleno vivo. Lleva --sobre-amarillo encima (10.7:1).
+                        Como punto de luz o trazo va con --punto-aro debajo.
+     --oro              el amarillo cuando tiene que ser TEXTO o ícono
+                        (6.6:1 sobre papel).
+     --amarillo-palido  lavados y fondos de énfasis. Nunca texto.
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+
+  /* ── Papel y tinta ─────────────────────────────────────────────────── */
+  --papel: #f2efe7;
+  --papel-alto: #faf8f2;
+  --papel-hondo: #e7e3d8;
+  --tinta: #17140f;
+  --tinta-media: #57513f;
+  --tinta-tenue: #6b6450;
+  --linea: #ddd8c9;
+  --linea-fuerte: #bdb6a2;
+  --linea-control: #867f6b;
+  --velo: rgba(23, 20, 15, 0.06);
+
+  /* ── El amarillo, en sus tres papeles ──────────────────────────────── */
+  --amarillo: #f2c200;
+  --amarillo-alto: #ffd21e;
+  --punto-aro: #8a6b00;
+  --oro: #6a5000;
+  --amarillo-palido: #fbf0c9;
+  --sobre-amarillo: #1a1610;
+
+  --foco: var(--oro);
+
+  /* ── Vidrio líquido ────────────────────────────────────────────────
+     El vidrio es ESTRUCTURA, no decoración: sólo lo llevan las dos
+     superficies que de verdad se apoyan sobre el fondo animado — el
+     marco del hero y las pestañas. Ningún otro panel de la página lo usa.
+
+     Acá vive SÓLO el color. Cuánto tinte, cuánto desenfoque y cuánta
+     refracción lleva cada superficie son props de `useVidrio`
+     (app/vidrio-liquido.tsx), porque son distintos en cada una y porque
+     el valor de la refracción tiene que viajar inline. Ver § 5.
+
+     Los alfa no son gusto: salen de medir el texto contra el momento MÁS
+     OSCURO del campo de líneas (dos trazos cruzados en el pico del latido).
+     El marco bajó de 0.68 a 0.30 —el humano lo pidió mucho más
+     transparente— y a ese tinte `--tinta-media` NO llega a 4.5:1 (2.67).
+     Lo que lo sostiene es `--lavado-hero`, un lavado suave bajo el bloque
+     de texto: 0.30 + 0.56·0.70 = 0.692 de tinte efectivo, y ahí sí pasa.
+     El vidrio vive en el canto y el lavado vive bajo las letras.
+
+     REGLA: dentro de `.hero`, fuera de las pestañas, no va `--tinta-tenue`.
+     El hero usa `--tinta` y `--tinta-media`, y nada más. */
+  --vidrio-papel: 250 248 242;
+  /* Sin `backdrop-filter` el vidrio no difumina nada: si se quedara
+     traslúcido el texto caería sobre las líneas en crudo. Se vuelve casi
+     opaco. Va por su propia variable para que la hoja pueda pisar al tinte
+     que las props ponen inline sin recurrir a `!important`. */
+  --vidrio-tinte-sin-soporte: 0.94;
+  --lavado-hero: 0.56;
+
+  /* ── Ritmo ─────────────────────────────────────────────────────────
+     Un solo compás. Arriba de un título va más aire que abajo. */
+  --e1: 0.25rem;
+  --e2: 0.5rem;
+  --e3: 0.75rem;
+  --e4: 1rem;
+  --e5: 1.5rem;
+  --e6: 2.25rem;
+  --e7: 3.5rem;
+  --e8: 5.5rem;
+
+  --radio: 4px;
+  --radio-tarjeta: 10px;
+  --radio-pestana: 12px;
+  --radio-marco: clamp(14px, 1.8vw, 26px);
+  --radio-pildora: 999px;
+
+  --rapido: 140ms;
+  --medio: 320ms;
+  --lento: 560ms;
+  /* Salida exponencial. Es la curva de todo lo que abre y cierra. */
+  --salida: cubic-bezier(0.16, 1, 0.3, 1);
+  /* La segunda y última curva: el overshoot del dock. Es lo único que una
+     librería de springs haría mejor —el rebote al asentarse— y esto lo
+     aproxima sin sumar 50 KB a horas del deploy. */
+  --rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dock: 260ms;
+
+  /* ── El largo de las pestañas ──────────────────────────────────────
+     Dormida y despierta. El ancho real es la interpolación entre las dos
+     según la distancia del cursor; ver § 6 y app/pestanas-dock.tsx. */
+  --pestana-corta: clamp(5.75rem, 8.5vw, 8rem);
+  --pestana-larga: clamp(10rem, 15vw, 14rem);
+
+  /* ── Tipografía ────────────────────────────────────────────────────
+     Display: Instrument Serif (next/font, auto-hosteada).
+     Cuerpo: stack del sistema, a propósito. Ver DESIGN.md § Tipografía. */
+  --serif: var(--display), "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --texto: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
+  /* Medida de lectura del cuerpo corrido. */
+  --medida: 68ch;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   2 · BASE
+   ══════════════════════════════════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--papel);
+  color: var(--tinta);
+  font-family: var(--texto);
+  font-size: 15px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100svh;
+  /* Nada de scroll lateral del documento: lo ancho scrollea en su caja. */
+  overflow-x: hidden;
+}
+
+/*
+ * La hoja lleva un tono apenas por debajo del papel. No es decoración: el
+ * vidrio de las tarjetas necesita algo que dejar pasar. Sobre papel plano una
+ * superficie translúcida es indistinguible de una opaca — la misma razón por
+ * la que la portada terminó en tono medio.
+ * Es mucho más suave que la portada: acá manda la lectura de los datos, no
+ * el efecto.
+ */
+.hoja {
+  max-width: 96rem;
+  margin: 0 auto;
+  padding-inline: clamp(var(--e4), 4vw, var(--e8));
+  padding-bottom: var(--e8);
+  /* Los grises se oscurecen acá, igual que en la portada. No es gusto: eran
+     ellos —no el diseño— los que topaban el vidrio. Con los de papel, la
+     tarjeta no podía bajar de 0.35 de opacidad sin que el tenue cayera de
+     4.5:1. Con estos baja a 0.22 y sobra margen. */
+  --tinta-media: #4b4534;
+  --tinta-tenue: #443f2f;
+  /* El aro del punto de luz también baja de tono. No es decorativo: es cómo
+     se lee la severidad, así que le corresponde el mínimo de 3:1 de 1.4.11.
+     Con la tarjeta al 15% el valor de papel caía a 2.98. */
+  --punto-aro: #725700;
+
+  background:
+    radial-gradient(130% 80% at 50% 0, rgb(196 187 167 / 0.95) 0, rgb(196 187 167 / 0) 65%),
+    var(--papel);
+}
+
+.saltar {
+  position: absolute;
+  left: var(--e4);
+  top: var(--e4);
+  z-index: 20;
+  transform: translateY(-250%);
+  background: var(--amarillo);
+  color: var(--sobre-amarillo);
+  border: 0;
+  border-radius: var(--radio-pildora);
+  padding: var(--e2) var(--e4);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.saltar:focus-visible {
+  transform: translateY(0);
+}
+
+/* Título de sección que existe para el lector de pantalla y no para el ojo. */
+.rotulo-seccion {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  margin: 0;
+}
+
+/*
+ * El rótulo de los caminos, ahora visible. Sigue siendo el mismo <h2> que
+ * etiqueta el grupo de pestañas por `aria-labelledby` — mostrarlo no rompe esa
+ * relación, sólo deja de esconderla.
+ *
+ * Va en serif para atarlo al titular, pero CHICO: el hero manda y esto es un
+ * rótulo, no un segundo título. Y con una línea de oro corta al lado en vez de
+ * un subrayado completo — una regla que cruza todo el ancho competiría con las
+ * pestañas que tiene justo debajo.
+ */
+/*
+ * El aire es ASIMÉTRICO a propósito: mucho arriba, poco abajo.
+ *
+ * El rótulo venía con 0 arriba y --e3 abajo, así que flotaba a media distancia
+ * entre la bajada de la portada y las pestañas, sin pertenecerle a ninguna de
+ * las dos. Con el aire volcado hacia arriba la proximidad dice de quién es el
+ * título: se despega del bloque anterior y se pega a las pestañas que
+ * introduce.
+ *
+ * Va en `padding-top` y no en `margin-top` para que no colapse contra lo que
+ * tenga arriba — el rótulo es hermano de `.hero-centro`, no hijo.
+ */
+.rotulo-caminos {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e3);
+  padding-top: var(--e7);
+  margin: 0 0 var(--e2);
+  font-family: var(--serif);
+  font-size: clamp(0.95rem, 1.5vw, 1.2rem);
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  color: var(--tinta-media);
+}
+
+/* La línea crece hasta donde quede lugar, pero el rótulo manda el ancho. */
+.rotulo-caminos::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    var(--punto-aro) 0,
+    rgb(0 0 0 / 0) 12rem
+  );
+  opacity: 0.7;
+}
+
+:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: var(--amarillo);
+  color: var(--sobre-amarillo);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   3 · PUNTO DE LUZ — la severidad y el estado se dicen con un punto.
+        Nunca con un borde de color al costado de una tarjeta.
+
+        Sobre papel el amarillo solo no se ve (1.46:1), así que el punto
+        encendido lleva aro de --punto-aro: 4.37:1 contra el papel, que es
+        lo que pide WCAG 1.4.11 para un objeto gráfico con significado.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.lampara {
+  --nucleo: transparent;
+  --aro: var(--linea-fuerte);
+  --grosor: 1px;
+  flex: none;
+  display: inline-block;
+  width: var(--diam, 9px);
+  height: var(--diam, 9px);
+  border-radius: 50%;
+  background: var(--nucleo);
+  box-shadow: inset 0 0 0 var(--grosor) var(--aro);
+  vertical-align: 0.02em;
+  transition:
+    background var(--medio) var(--salida),
+    box-shadow var(--medio) var(--salida);
+}
+
+/* Encendidos: los tres tonos de alerta comparten núcleo amarillo. La
+   distinción entre ellos la lleva el grosor del aro — cuánta luz hay —
+   porque esta paleta tiene un solo acento y no lo va a repartir en tres. */
+.lampara[data-lamp="rojo"] {
+  --nucleo: var(--amarillo);
+  --aro: var(--punto-aro);
+  --grosor: 2.5px;
+}
+
+.lampara[data-lamp="ambar"] {
+  --nucleo: var(--amarillo);
+  --aro: var(--punto-aro);
+  --grosor: 1.5px;
+}
+
+.lampara[data-lamp="naranja"] {
+  --nucleo: var(--amarillo);
+  --aro: var(--punto-aro);
+  --grosor: 1px;
+}
+
+/* Encendida sin alerta: el punto es tinta, presente y callado. */
+.lampara[data-lamp="claro"] {
+  --nucleo: transparent;
+  --aro: var(--tinta-tenue);
+  --grosor: 1.5px;
+}
+
+/* Apagada conserva el aro, sin núcleo: se ve que hay una lámpara y que no
+   prendió. Es exactamente lo que le pasa a una detección suprimida. */
+.lampara[data-lit="no"] {
+  --nucleo: transparent;
+  --aro: var(--linea-fuerte);
+  --grosor: 1px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   4 · FONDO DE FLUJO — las líneas que corren detrás del marco.
+
+        La geometría y el movimiento vienen del componente que pinneó el
+        humano (`references/background-paths.tsx`); acá están hechos con
+        `stroke-dasharray` + `stroke-dashoffset` en vez de framer-motion.
+        Con `pathLength="1"` en el path, el patrón mide exactamente 1, así
+        que correr el offset de 0 a −1 es una vuelta entera sin costura.
+
+        Vive DEBAJO del texto del hero: su opacidad tiene techo y el techo
+        está medido, no elegido a ojo. Ver § 1 · Vidrio.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.fondo-flujo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/*
+ * DÓNDE VIVE CADA ANIMACIÓN, Y POR QUÉ. Esto está medido, no supuesto
+ * (`node docs/design/mirar.mjs` imprime los fps con el hero a la vista):
+ *
+ *   48 trazos, dash + opacidad POR TRAZO ........ 21 fps
+ *   48 trazos, sólo dash por trazo .............. 55 fps
+ *   48 trazos, dash por trazo + pulso en el svg . 60 fps  ← lo que se usa
+ *
+ * Animar `opacity` en cada `<path>` obliga a repintar el SVG entero en cada
+ * cuadro y hunde el frame rate; la cantidad de trazos casi no influye. El
+ * pulso se mudó entonces al `<svg>`, que con `will-change: opacity` se va a
+ * su propia capa y lo resuelve el compositor. El campo late en conjunto en
+ * vez de trazo por trazo: se pierde poco y se gana la página fluida.
+ */
+.fondo-flujo-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Sin movimiento la opacidad se queda acá. Con movimiento, manda el pulso. */
+  opacity: 0.6;
+}
+
+/* Tinta media, no tinta plena: un dibujo callado. Con este tono el campo
+   puede ser bastante más denso sin comerse el contraste del texto de arriba. */
+.flujo-linea {
+  fill: none;
+  stroke: var(--tinta-media);
+  stroke-linecap: round;
+  stroke-dasharray: var(--visible) var(--hueco);
+}
+
+/* Unas pocas líneas en oro. El amarillo no se reparte por el campo. */
+.flujo-linea[data-flujo="oro"] {
+  stroke: var(--punto-aro);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* El retraso es negativo: cada trazo entra con la animación ya empezada,
+     así el campo aparece repartido desde el primer cuadro en vez de
+     amontonado en el arranque de las curvas. */
+  .flujo-linea {
+    animation: flujo-corre var(--dur) linear var(--desfase) infinite;
+  }
+
+  .fondo-flujo-svg {
+    will-change: opacity;
+    animation: flujo-late 17s ease-in-out infinite;
+  }
+}
+
+/* Sin movimiento: las líneas quedan ENTERAS y quietas. No se ocultan. */
+@media (prefers-reduced-motion: reduce) {
+  .flujo-linea {
+    stroke-dasharray: none;
+  }
+}
+
+/* Con `pathLength="1"` el patrón mide exactamente 1: correr el offset una
+   unidad es una vuelta entera del path, sin costura. */
+@keyframes flujo-corre {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+
+/* El pico de 0.78 es el que entra en el cálculo de contraste del vidrio.
+   Si sube, hay que volver a correr docs/design/contraste.mjs. */
+@keyframes flujo-late {
+  0%,
+  100% {
+    opacity: 0.34;
+  }
+  50% {
+    opacity: 0.78;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   5 · VIDRIO LÍQUIDO — la superficie, leída de las tres referencias
+
+        `references/liquidglass1..3.png` + `references/liquid-glass-card.tsx`.
+        La receta es CSS + SVG y no necesita una línea de librería de
+        animación; lo que framer-motion maneja en la referencia (drag,
+        click-para-expandir, scale en hover) acá no existe.
+
+          · EL FILO ES EL EFECTO. En las tres capturas es lo primero que se
+            ve. Sobre fondo oscuro alcanza con una línea blanca; sobre papel
+            hueso el blanco solo no existe, así que la traducción a modo
+            claro es un canto de DOS líneas — hairline de `--linea-control`
+            por fuera, filo blanco por dentro — que es exactamente el aro
+            plateado de `liquidglass3.png`.
+          · EL CENTRO ES CASI TRANSPARENTE. No es un panel esmerilado.
+          · EL FONDO SE DOBLA AL CRUZARLO (`liquidglass2.png`, el tallo de la
+            flor). `feTurbulence` + `feDisplacementMap`, adentro del
+            `backdrop-filter` y no al lado; el porqué —y las dos pruebas de
+            navegador que lo decidieron— están en `app/vidrio-liquido.tsx`.
+          · LOS ESPECULARES son `.vidrio-lustre`.
+
+        Los valores por superficie (tinte, desenfoque, refracción) son props
+        de `useVidrio`, no tokens: son distintos en cada una y el de la
+        refracción tiene que viajar inline para poder caer a la declaración
+        de esta hoja si el navegador no lo soporta.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.vidrio {
+  /* Defaults. Las props de `useVidrio` los pisan inline. */
+  --vidrio-tinte: 0.3;
+  --vidrio-radio: var(--radio-marco);
+  --vidrio-desenfoque: 9px;
+  --vidrio-saturacion: 1.12;
+  --vidrio-filo: 0.9;
+  --vidrio-halo: 0.1;
+  --vidrio-lustre: 0.55;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--linea-control);
+  border-radius: var(--vidrio-radio);
+  background: rgb(var(--vidrio-papel) / var(--vidrio-tinte-efectivo, var(--vidrio-tinte)));
+  backdrop-filter: blur(var(--vidrio-desenfoque)) saturate(var(--vidrio-saturacion));
+  -webkit-backdrop-filter: blur(var(--vidrio-desenfoque)) saturate(var(--vidrio-saturacion));
+  box-shadow:
+    /* Ranura para que una superficie se marque (la pestaña activa lleva
+       filo amarillo) sin borrar el vidrio de abajo. */
+    var(--vidrio-marca, 0 0 rgb(0 0 0 / 0)),
+    /* El halo: la pieza se despega del papel. */
+    0 26px 60px -34px rgb(23 20 15 / 0.5),
+    0 2px 10px rgb(23 20 15 / var(--vidrio-halo)),
+    /*
+      EL FILO. Las tres referencias son vidrio sobre fondo OSCURO: ahí un filo
+      blanco brilla solo. Sobre papel hueso, blanco contra `#f2efe7` es una
+      diferencia de ~5% y desaparece. Por eso el filo claro necesita un canto
+      OSCURO debajo contra el cual leerse: sin ese contraste, el recurso que
+      más se ve en las referencias es el que menos se ve acá.
+    */
+    inset 0 0 0 1px rgb(23 20 15 / calc(var(--vidrio-filo) * 0.28)),
+    inset 1px 1px 0 0 rgb(255 255 255 / var(--vidrio-filo)),
+    inset -1px -1px 0 0 rgb(255 255 255 / calc(var(--vidrio-filo) * 0.72)),
+    inset 0 2px 3px -2px rgb(255 255 255 / var(--vidrio-filo)),
+    inset 0 -2px 3px -2px rgb(255 255 255 / calc(var(--vidrio-filo) * 0.6));
+}
+
+/* El `<defs>` del filtro no ocupa lugar: sólo transporta el filtro. */
+.vidrio-filtro {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Los especulares: el destello del canto de arriba y los dos brillos
+   diagonales opuestos que se ven en `liquidglass3.png`. */
+.vidrio-lustre {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to bottom,
+      rgb(255 255 255 / var(--vidrio-lustre)) 0,
+      rgb(255 255 255 / 0) 18%
+    ),
+    linear-gradient(
+      132deg,
+      rgb(255 255 255 / calc(var(--vidrio-lustre) * 0.55)) 0,
+      rgb(255 255 255 / 0) 26%,
+      rgb(255 255 255 / 0) 74%,
+      rgb(255 255 255 / calc(var(--vidrio-lustre) * 0.4)) 100%
+    );
+}
+
+/* El contenido va por encima del lustre; el padding vive acá y no en la
+   superficie, para que el filo y los especulares den la vuelta completa. */
+.vidrio-cuerpo {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sin `backdrop-filter` el vidrio no difumina nada: si se quedara
+   traslúcido, el texto caería sobre las líneas en crudo. Se vuelve casi
+   opaco. Pisa al tinte que las props ponen inline por la variable
+   intermedia, no con `!important`. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .vidrio {
+    --vidrio-tinte-efectivo: var(--vidrio-tinte-sin-soporte);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   6 · PORTADA — el primer frame: un marco de vidrio embutido con el
+        título adentro y las cinco pestañas abajo. Nada más entra acá:
+        ni controles, ni carriles, ni mascota. Ver DESIGN.md.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* El respiro de afuera del marco es donde el campo de flujo se ve en crudo,
+   sin vidrio encima. Por eso no es de 4 px. */
+/*
+ * LA PORTADA SE INVIERTE, y no es capricho: es lo que hace posible el vidrio.
+ *
+ * El liquid glass de las tres referencias vive sobre fondo OSCURO. Ahí el filo
+ * blanco brilla solo y el fondo doblado tiene contraste para leerse. Sobre
+ * papel hueso, un filo blanco es una diferencia del 5% y la refracción dobla
+ * hairlines pálidas: el efecto existe en el DOM y no se ve.
+ *
+ * Así que la portada es una lámina profunda dentro de una página de papel —
+ * la composición de `references/Screenshot 2026-07-27 113240.png`. Los tokens
+ * se invierten SOLO acá adentro: todo lo que hereda (campo de flujo, texto,
+ * vidrio) se acomoda solo, y la hoja de abajo sigue siendo papel.
+ */
+.portada {
+  /*
+    NI PAPEL NI OSCURO: un tono cálido intermedio.
+    Sobre papel el vidrio no existía — filo blanco contra hueso es un 5% de
+    diferencia, y la refracción doblaba hairlines pálidas. Con fondo profundo
+    el efecto aparecía pero el mundo dejaba de ser el del proyecto.
+    Este tono es lo mínimo que hace falta para que el filo se lea y el doblez
+    tenga qué doblar, y deja la tinta oscura arriba: sigue siendo una página
+    clara. `--papel` es la palanca — subilo hacia #dcd4c4 para aclarar,
+    bajalo hacia #b0a48c para que el vidrio pese más.
+  */
+  --papel: #c4bba7;
+  --papel-alto: #d2caba;
+  --papel-hondo: #b3a992;
+  --linea: #a99e87;
+  --linea-fuerte: #8d8370;
+  --linea-control: #5f5849;
+  /* Los grises tibios se oscurecen acá: sobre papel pasaban 4.5:1 de sobra,
+     sobre este tono el tenue caía a 3.43. Medido, no estimado. */
+  --tinta-media: #4b4534;
+  --tinta-tenue: #443f2f;
+  /* El vidrio ACLARA sobre el tono medio: el panel se lee más claro que su
+     alrededor, que es exactamente cómo se lee un cristal. */
+  --vidrio-papel: 250 248 242;
+
+  position: relative;
+  min-height: 100svh;
+  padding: clamp(0.75rem, 2.2vw, 2rem);
+  display: grid;
+  place-items: center;
+  background: var(--papel);
+  color: var(--tinta);
+}
+
+/* El campo de flujo sobre la lámina profunda: la misma tinta media, que ahora
+   es clara, y por eso el mismo dibujo callado se lee sin subir la densidad. */
+.portada .fondo-flujo-svg {
+  opacity: 0.5;
+}
+
+/* El marco. Es una de las dos únicas superficies de vidrio de la página.
+   MÁS CHICO QUE LA PANTALLA a propósito: el campo de flujo tiene que correr
+   libre alrededor, no asomar por un margen de doce píxeles. */
+.hero {
+  z-index: 1;
+  width: min(100%, 66rem);
+  height: min(80svh, 44rem);
+  max-height: 100%;
+  overflow: hidden;
+
+  /*
+    EL GLOW AMARILLO DEL CANTO.
+    Va por `--vidrio-marca`, que es el primer shadow de la cadena de `.vidrio`
+    y existe justamente para que una superficie se marque sin pisar el filo ni
+    el halo de abajo.
+    Son tres capas, no una: un halo suelto es decoración plana. Acá el canto
+    lleva su propia línea nítida, y el resplandor sale de ella hacia afuera y
+    hacia adentro — como luz que el borde del cristal atrapa y reparte.
+  */
+  --vidrio-marca:
+    inset 0 0 0 1px rgb(242 194 0 / 0.55),
+    inset 0 0 12px -2px rgb(242 194 0 / 0.4),
+    0 0 0 1px rgb(242 194 0 / 0.3),
+    0 0 22px -4px rgb(242 194 0 / 0.55),
+    0 0 48px -12px rgb(242 194 0 / 0.35);
+}
+
+/*
+  El resplandor respira con el mismo pulso del campo de flujo, no con uno
+  propio: dos latidos distintos en la misma pantalla se leen como dos cosas
+  compitiendo. Un solo momento autoral, que ya estaba elegido.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  .hero {
+    animation: hero-latido 7.5s ease-in-out infinite;
+  }
+}
+
+@keyframes hero-latido {
+  0%,
+  100% {
+    --vidrio-filo: 0.92;
+  }
+  50% {
+    --vidrio-filo: 1;
+  }
+}
+
+.hero-cuerpo {
+  padding: clamp(var(--e4), 3vh, var(--e6)) clamp(var(--e4), 3vw, var(--e6)) 0;
+}
+
+.hero-centro {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding-block: var(--e4);
+}
+
+.hero-titulo {
+  position: relative;
+  width: 100%;
+  max-width: 60rem;
+}
+
+/*
+ * EL LAVADO BAJO EL TEXTO — donde se resuelve la tensión.
+ *
+ * El marco pasó de 0.68 a 0.30 de tinte porque el humano lo pidió mucho más
+ * transparente. A 0.30, sobre el momento más oscuro del campo, `--tinta`
+ * todavía da 6.21:1 pero `--tinta-media` se cae a 2.67:1: la bajada y el
+ * lema no pasan. Subir el vidrio entero sería deshacer el pedido.
+ *
+ * Entonces la densidad va SÓLO donde hay letras. El vidrio vive en el canto
+ * y el lavado vive bajo el texto: 0.30 + 0.56·0.70 = 0.692 de tinte
+ * efectivo, medido en `docs/design/contraste.mjs`.
+ *
+ * Es un rectángulo de papel con halo, no un panel: sin canto duro, no se lee
+ * como una caja adentro de la caja — se lee como el núcleo de luz de
+ * `liquidglass3.png`. Y al estar anclado al bloque de texto, la meseta cubre
+ * las letras en cualquier viewport, cosa que un gradiente centrado en el
+ * marco no garantiza: una elipse no cubre bien un bloque de texto.
+ *
+ * El desenfoque es un `box-shadow`, NO `filter: blur()`. Medido: un filtro
+ * adentro de un elemento con `backdrop-filter` obliga a Chromium a rehacer
+ * el backdrop y se comía la mitad del frame rate. El box-shadow se rasteriza
+ * una vez y no vuelve a costar. Como la sombra externa no se pinta debajo de
+ * la caja, el alfa tampoco se suma consigo mismo.
+ */
+.hero-titulo::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -0.75rem -1.25rem;
+  border-radius: 2rem;
+  /* El lavado va en su propio token y no en `--vidrio-papel`: ese lo usa el
+     vidrio para ACLARAR, y acá hace falta lo contrario — un velo profundo bajo
+     el texto claro. Compartirlos pondría un halo claro detrás de tinta clara. */
+  background: rgb(var(--lavado-color, var(--vidrio-papel)) / var(--lavado-hero));
+  box-shadow: 0 0 2.75rem 1.5rem
+    rgb(var(--lavado-color, var(--vidrio-papel)) / calc(var(--lavado-hero) * 0.72));
+}
+
+/* El salto de escala ES el diseño: display enorme contra cuerpo diminuto. */
+.titular {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  line-height: 0.86;
+  letter-spacing: -0.025em;
+  color: var(--tinta);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-wrap: balance;
+}
+
+.titular-nombre {
+  display: block;
+  font-size: clamp(2.8rem, 14vw, 13rem);
+  /* Con `line-height: 0.86` la caja no cubre el descendente de la "g" de
+     Agent: sin este colchón, el lema se le monta encima. */
+  padding-bottom: 0.17em;
+}
+
+/* Dos líneas explícitas: "Reflex Agent" en una sola no puede ser enorme y
+   entrar a la vez. El espacio en el texto conserva el nombre accesible. */
+.titular-nombre > span {
+  display: block;
+}
+
+.titular-lema {
+  display: block;
+  font-style: italic;
+  font-size: clamp(1.05rem, 3.6vw, 2.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.012em;
+  color: var(--tinta-media);
+}
+
+.portada-bajada {
+  margin: clamp(var(--e5), 4vh, var(--e6)) auto 0;
+  max-width: min(66ch, 34rem);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--tinta-media);
+  text-wrap: pretty;
+}
+
+/* ── Las cinco pestañas: un dock ──────────────────────────────────────
+   Mínimas, apoyadas contra el borde de abajo del marco. CORTAS CUANDO
+   DUERMEN: el ancho de cada una responde a la distancia del cursor, así
+   que la de al lado crece bastante y la siguiente bastante menos. Eso —y
+   no un hover binario— es lo que hace que se lea como un dock; el efecto
+   viene de `references/dock-magnify.tsx`, sin la librería.
+
+   El JS sólo escribe `--cerca` (1 debajo del cursor, 0 fuera del alcance),
+   agrupado en un `requestAnimationFrame`. El ancho lo hace el `calc()` de
+   acá abajo, y el largo EN REPOSO lo decide esta hoja, no el JS: sin
+   puntero fino y con `prefers-reduced-motion` las pestañas arrancan
+   enteras. Una pestaña recortada que nadie puede agrandar es una pestaña
+   rota — y buena parte del público que vota entra desde el teléfono.
+
+   La banda tiene alto fijo: una pestaña abierta no empuja al título ni
+   mueve a sus vecinas hacia arriba. */
+
+.pestanas {
+  position: relative;
+  z-index: 2;
+  list-style: none;
+  margin: 0 auto;
+  width: 100%;
+  height: clamp(5.5rem, 12vh, 7.25rem);
+  padding: 0 0 clamp(var(--e2), 1.6vh, var(--e4));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(var(--e1), 0.6vw, var(--e2));
+}
+
+.pestana {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+}
+
+.pestana-boton {
+  /* `--cerca` la escribe el puntero (app/pestanas-dock.tsx); `--abierto` la
+     escribe el CSS con hover, foco o toque. El ancho toma el mayor de las
+     dos: así el teclado abre la pestaña entera aunque el cursor esté lejos,
+     y un `--cerca` viejo no puede cerrarla. */
+  --cerca: 0;
+  --abierto: 0;
+  width: var(--pestana-larga);
+  max-width: 100%;
+  min-width: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: var(--e2) var(--e3);
+  transition:
+    width var(--dock) var(--rebote),
+    background-color var(--rapido) linear,
+    box-shadow var(--rapido) linear;
+}
+
+/* La magnificación es una gracia de PUNTERO. Donde no hay puntero fino no
+   hay nada que magnificar, y la pestaña arranca entera. */
+@media (hover: hover) and (pointer: fine) {
+  .pestana-boton {
+    width: calc(
+      var(--pestana-corta) +
+        (var(--pestana-larga) - var(--pestana-corta)) * max(var(--cerca), var(--abierto))
+    );
+  }
+}
+
+/* Sin movimiento: no hay proximidad ni recorte, pero la pestaña se sigue
+   abriendo por puntero, por teclado y por toque. */
+@media (prefers-reduced-motion: reduce) {
+  .pestana-boton {
+    width: var(--pestana-larga);
+  }
+}
+
+/* El contenido, por encima del lustre del vidrio. */
+.pestana-cima {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: var(--e2);
+  min-width: 0;
+}
+
+.pestana-orden {
+  flex: none;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--tinta-tenue);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--medio) var(--salida);
+}
+
+.pestana[data-encendida="si"] .pestana-orden {
+  color: var(--oro);
+}
+
+.pestana-titulo {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--serif);
+  font-size: 1.0625rem;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--tinta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pestana-lampara {
+  --diam: 8px;
+  align-self: center;
+}
+
+/* La caja pasa de 0fr a 1fr; el panel es el que recorta. */
+.pestana-caja {
+  position: relative;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--medio) var(--salida);
+}
+
+.pestana-panel {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.pestana-texto {
+  padding-top: var(--e2);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--tinta-media);
+  text-wrap: pretty;
+}
+
+/* Abierta: por puntero, por teclado, o por toque (`data-abierta`). Las tres
+   entradas comparten estado visual — un disclosure sólo-hover no lo puede
+   usar ni el teclado ni una pantalla táctil. */
+.pestana-boton:hover .pestana-caja,
+.pestana-boton:focus-visible .pestana-caja,
+.pestana[data-abierta="si"] .pestana-caja {
+  grid-template-rows: 1fr;
+}
+
+/* Abierta: se agranda al largo entero (`--abierto`), se pone un poco más
+   densa y se marca con el filo amarillo POR DENTRO del vidrio — la marca va
+   por su propia ranura en el box-shadow, así no borra ni el filo blanco ni
+   el halo. El tinte sube por `--vidrio-tinte-efectivo` y no por
+   `--vidrio-tinte`, que lo pone la prop inline y ganaría siempre. */
+.pestana-boton:hover,
+.pestana-boton:focus-visible,
+.pestana[data-abierta="si"] .pestana-boton {
+  --abierto: 1;
+  --vidrio-tinte-efectivo: 0.95;
+  --vidrio-marca: inset 0 0 0 1.5px var(--amarillo);
+}
+
+/* La etapa que el visor está mostrando queda marcada aunque nadie la toque
+   — marcada, no abierta: no se agranda sola. */
+.pestana[data-mirando="si"] .pestana-boton {
+  --vidrio-marca: inset 0 0 0 1.5px var(--amarillo);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   7 · ESCENA — el motor corriendo, ya debajo del primer frame
+   ══════════════════════════════════════════════════════════════════════ */
+
+.escena {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e5);
+  scroll-margin-top: var(--e5);
+  padding-top: var(--e7);
+  /* El carril entra deslizándose: sin esto, durante esos 320 ms aparece una
+     barra de scroll horizontal. `clip` no crea contenedor de scroll. */
+  overflow-x: clip;
+  overflow-clip-margin: 24px;
+}
+
+/*
+ * VISTA COMPLETA: quién mide la pantalla, y quién se reparte lo que sobra.
+ *
+ * La altura de `100svh` vive en la HOJA, no en la escena. Puesta en la escena
+ * había que adivinar cuánto ocupaba el pie de página y siempre sobraba o
+ * faltaba una franja; puesta en la hoja, la escena pide `flex: 1` y el reparto
+ * lo hace el navegador. `svh` y no `vh` para que la barra del navegador móvil
+ * no se coma un carril al aparecer.
+ *
+ * `height` y NO `min-height` en la hoja — medido: con `min-height: 100svh` la
+ * hoja daba 6675 px de alto y la escena 6571. Un ítem `flex: 1` sólo se
+ * encoge si su padre tiene altura DEFINIDA; con `min-height` el padre crece
+ * con su contenido, así que "una fracción de lo que sobra" pasa a ser todo lo
+ * que hay y las listas vuelven a colgar fuera de la pantalla.
+ *
+ * De ahí para abajo la cadena que obliga a scrollear adentro de cada celda es
+ * `.escena { min-height: 0 }` → `.carriles { min-height: 0 }` → filas
+ * `minmax(0, 1fr)` → `.carril { overflow: hidden }`. Un ítem flex tampoco se
+ * encoge por debajo de su contenido sin ese `min-height: 0`.
+ */
+.escena[data-view="full"] {
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--e5);
+  padding-bottom: 0;
+  gap: var(--e4);
+}
+
+/* De borde a borde: la hoja suelta su ancho máximo y sus márgenes laterales.
+   El aire de los costados era espacio muerto con cinco carriles adentro. */
+.hoja[data-view="full"] {
+  max-width: none;
+  padding-inline: var(--e3);
+  padding-bottom: 0;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * El pie se pega a los carriles. Su `margin-top` de `--e8` era el hueco que
+ * quedaba entre la última tarjeta y la línea: 4.5rem de papel vacío, porque
+ * ese respiro está pensado para una página que scrollea, no para una que
+ * termina justo en el borde de la pantalla.
+ */
+.pie[data-view="full"] {
+  margin-top: 0;
+  padding-top: var(--e4);
+}
+
+/*
+ * La leyenda se despliega a lo ancho.
+ *
+ * `--medida` es el ancho de lectura cómoda (~65 caracteres) y es lo correcto
+ * para un párrafo que se lee de corrido. Este no lo es: es una referencia de
+ * parámetros que se BARRE con la vista. Atada a la medida ocupaba cuatro
+ * renglones, y cada renglón acá se lo saca a los carriles — el pie y la grilla
+ * se reparten la misma pantalla.
+ */
+.pie[data-view="full"] .leyenda {
+  max-width: none;
+  line-height: 1.5;
+}
+
+.escena-cabeza {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e3);
+}
+
+.titulo-seccion {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2rem, 5.2vw, 3.6rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--tinta);
+  text-wrap: balance;
+}
+
+/* ── Lectura de la corrida ───────────────────────────────────────────── */
+
+.estado-corrida {
+  margin: 0;
+  max-width: var(--medida);
+  font-size: 0.8125rem;
+  color: var(--tinta-media);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.3em;
+  line-height: 1.7;
+}
+
+.estado-corrida strong {
+  color: var(--tinta);
+  font-weight: 600;
+}
+
+.estado-corrida .punto {
+  color: var(--linea-fuerte);
+}
+
+.estado-corrida time,
+.cifra {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.estado-corrida [data-modo="off"] {
+  color: var(--oro);
+  font-weight: 600;
+}
+
+.estado-corrida [data-modo="full"],
+.estado-corrida [data-modo="decide"] {
+  color: var(--tinta-tenue);
+}
+
+.estado-corrida [data-error="motor"] {
+  color: var(--tinta);
+  font-weight: 600;
+  background: var(--amarillo-palido);
+  padding: 0 0.35em;
+}
+
+/* La única píldora de amarillo vivo de la página: el modo forzado. Relleno
+   amarillo con tinta encima — 10.7:1. Nunca amarillo como texto. */
+.pildora {
+  display: inline-block;
+  padding: 0.15em 0.7em;
+  border-radius: var(--radio-pildora);
+  background: var(--amarillo);
+  color: var(--sobre-amarillo);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* ── Banda de controles ──────────────────────────────────────────────── */
+
+.banda {
+  border-top: 1px solid var(--linea);
+  border-bottom: 1px solid var(--linea);
+}
+
+.consola {
+  min-width: 0;
+}
+
+/*
+ * La lengüeta que abre la consola. El padding horizontal no es cosmético:
+ * cuando era un botón sin fondo, texto pegado al borde no se notaba porque no
+ * había borde. Al volverse vidrio aparece el filo, y un filo que toca la
+ * primera letra se lee como un error de maquetado.
+ * El radio va por lo mismo — una superficie de vidrio con esquinas vivas no
+ * existe en ninguna de las referencias.
+ */
+.consola-lengueta {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: var(--e3);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  color: var(--tinta);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio-tarjeta);
+  padding: var(--e3) var(--e4);
+  cursor: pointer;
+  transition:
+    background var(--rapido) linear,
+    border-color var(--rapido) linear;
+}
+
+.consola-lengueta:hover {
+  background: rgb(var(--vidrio-papel) / 0.34);
+  border-color: var(--tinta-tenue);
+}
+
+.consola-titulo {
+  font-weight: 600;
+  flex: none;
+}
+
+.consola-resumen {
+  flex: 1;
+  min-width: 0;
+  color: var(--tinta-media);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.consola-signo {
+  flex: none;
+  color: var(--oro);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  text-decoration-thickness: 1px;
+}
+
+/* La pestaña se agranda: la caja pasa de 0fr a 1fr. */
+.consola-caja {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--medio) var(--salida);
+}
+
+.consola[data-abierta="si"] .consola-caja {
+  grid-template-rows: 1fr;
+}
+
+.consola-panel {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--e4) var(--e6);
+  padding: var(--e2) 0 var(--e5);
+  border-top: 1px solid var(--linea);
+  margin-top: calc(var(--e1) * -1);
+}
+
+.grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.grupo legend {
+  padding: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--tinta-tenue);
+}
+
+.grupo-cuerpo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e2);
+}
+
+/* ── El botón. Hairline y texto; el estado activo es el relleno amarillo. */
+
+.boton {
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: var(--e2) var(--e4);
+  border: 1px solid var(--linea-control);
+  border-radius: var(--radio-pildora);
+  background: transparent;
+  color: var(--tinta);
+  cursor: pointer;
+  transition:
+    background var(--rapido) linear,
+    border-color var(--rapido) linear,
+    color var(--rapido) linear;
+}
+
+/* El hover NO reemplaza el vidrio: lo espesa. Poner un velo opaco encima
+   apagaba justo lo que hace que el control se lea como cristal. */
+.boton:hover:not(:disabled):not([aria-pressed="true"]) {
+  background: rgb(var(--vidrio-papel) / 0.34);
+  border-color: var(--tinta-tenue);
+}
+
+.boton[aria-pressed="true"] {
+  background: var(--amarillo);
+  border-color: var(--amarillo);
+  color: var(--sobre-amarillo);
+}
+
+.boton[aria-pressed="true"]:hover {
+  background: var(--amarillo-alto);
+  border-color: var(--amarillo-alto);
+}
+
+/* El fondo lo pone la regla compartida de vidrio: acá poner `transparent`
+   volvería a apagarlo y el botón deshabilitado perdería el material. */
+.boton:disabled {
+  cursor: not-allowed;
+  color: var(--tinta-tenue);
+  border-color: var(--linea);
+}
+
+/* Ancho en rem y no en ch: Chrome mete los botones de incremento adentro de
+   la caja y con 7ch el valor se cortaba. */
+.grupo input[type="number"] {
+  width: 5.5rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--linea-control);
+  border-radius: var(--radio);
+  background: var(--papel-hondo);
+  color: var(--tinta);
+}
+
+.grupo input[type="number"]::placeholder {
+  color: var(--tinta-tenue);
+}
+
+/* Interruptor del modo offline: dos rieles y un punto. */
+.interruptor {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e2);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.interruptor input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.interruptor-cuerpo {
+  width: 38px;
+  height: 20px;
+  border-radius: var(--radio-pildora);
+  background: transparent;
+  border: 1px solid var(--linea-control);
+  position: relative;
+  transition:
+    background var(--rapido) linear,
+    border-color var(--rapido) linear;
+}
+
+.interruptor-punto {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--tinta-tenue);
+  transition:
+    transform var(--medio) var(--salida),
+    background var(--rapido) linear;
+}
+
+.interruptor input:checked + .interruptor-cuerpo {
+  background: var(--amarillo);
+  border-color: var(--amarillo);
+}
+
+.interruptor input:checked + .interruptor-cuerpo .interruptor-punto {
+  transform: translateX(18px);
+  background: var(--sobre-amarillo);
+}
+
+.interruptor input:focus-visible + .interruptor-cuerpo {
+  outline: 2px solid var(--foco);
+  outline-offset: 3px;
+}
+
+.interruptor-texto {
+  color: var(--tinta-media);
+}
+
+/* ── Mando: las flechas y el selector de vista ───────────────────────── */
+
+.mando {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e4);
+  flex-wrap: wrap;
+}
+
+.visor-mando {
+  flex: 1 1 18rem;
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+}
+
+.visor-mando[data-oculto="si"] {
+  display: none;
+}
+
+.paso {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 1.125rem;
+  line-height: 1;
+  font-family: var(--texto);
+  color: var(--tinta);
+  border: 1px solid var(--linea-control);
+  border-radius: 50%;
+  cursor: pointer;
+
+  transition:
+    background var(--rapido) linear,
+    border-color var(--rapido) linear,
+    box-shadow var(--rapido) linear,
+    color var(--rapido) linear;
+}
+
+/* ── EL VIDRIO DE LOS CONTROLES ────────────────────────────────────────
+ *
+ * Una sola receta para todo lo que se toca. Estaba escrita tres veces —
+ * tarjeta, flecha, control— y a la tercera se extrae: tres copias del mismo
+ * bloque es donde empiezan a divergir sin que nadie lo note.
+ *
+ * Los mismos valores que las tarjetas (0.15 y 8px) a propósito: un control y
+ * una tarjeta son el mismo material, y si el vidrio cambiara de espesor según
+ * el elemento dejaría de leerse como un sistema.
+ */
+:is(.paso, .boton, .consola-lengueta) {
+  background: rgb(var(--vidrio-papel) / 0.15);
+  backdrop-filter: blur(8px) saturate(1.16);
+  -webkit-backdrop-filter: blur(8px) saturate(1.16);
+  box-shadow:
+    /* El canto oscuro primero: sobre fondo claro, blanco solo no existe. */
+    inset 0 0 0 1px rgb(23 20 15 / 0.06),
+    inset 1px 1px 0 0 rgb(255 255 255 / 0.85),
+    inset -1px -1px 0 0 rgb(255 255 255 / 0.55),
+    0 1px 2px rgb(23 20 15 / 0.05);
+}
+
+/* Relleno sólido = ya no hay nada que refractar, así que el filo se apaga.
+   Dejarlo puesto sobre un amarillo pleno se lee como un borde mal hecho. */
+:is(.paso, .boton)[aria-pressed="true"],
+:is(.paso, .boton):hover:not(:disabled):not([aria-pressed="false"]) {
+  box-shadow: 0 1px 2px rgb(23 20 15 / 0.08);
+}
+
+/* Lo que no se puede tocar no sigue atrapando luz. */
+:is(.paso, .boton):disabled {
+  background: rgb(var(--vidrio-papel) / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(23 20 15 / 0.04);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :is(.paso, .boton, .consola-lengueta) {
+    background: var(--papel-alto);
+  }
+}
+
+/* En hover la flecha se llena de amarillo: deja de ser una lente y pasa a ser
+   la acción. El filo lo apaga la regla compartida de arriba. */
+.paso:hover:not(:disabled) {
+  background: var(--amarillo);
+  border-color: var(--amarillo);
+  color: var(--sobre-amarillo);
+}
+
+.paso:disabled {
+  cursor: not-allowed;
+  color: var(--tinta-tenue);
+  border-color: var(--linea);
+}
+
+.visor-posicion {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--e3);
+  min-width: 0;
+}
+
+.visor-etapa {
+  font-family: var(--serif);
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  color: var(--tinta);
+}
+
+.visor-cuenta {
+  font-size: 0.75rem;
+  color: var(--tinta-tenue);
+}
+
+.mando:has(.visor-mando[data-oculto="si"]) {
+  justify-content: flex-end;
+}
+
+/* ── Los carriles ─────────────────────────────────────────────────────── */
+
+.carriles {
+  display: grid;
+  gap: var(--e4);
+  align-items: start;
+}
+
+/*
+ * LA VISTA COMPLETA usa la pantalla entera, con la forma que el humano marcó
+ * en `references/new layout.png`.
+ *
+ *   ┌─────────┬────────────┬───────────────┬────────┐
+ *   │         │            │  DETECCIONES  │        │
+ *   │ EVENTOS │ INTERVALOS ├───────────────┤ ACCIÓN │
+ *   │         │            │      BOT      │        │
+ *   │         │            ├───────────────┤        │
+ *   │         │            │   DECISIÓN    │        │
+ *   └─────────┴────────────┴───────────────┴────────┘
+ *
+ * Las tres columnas laterales corren a lo alto; la del medio se parte en tres
+ * y ahí adentro detecciones y decisión corren a lo ANCHO. Ese cambio de eje no
+ * es estético: sus tarjetas son pocas y anchas —una decisión trae mensaje y
+ * motivo— así que apiladas desperdician el alto, y en fila aprovechan el
+ * espacio que la columna del medio tiene de sobra.
+ *
+ * La mascota queda literalmente en el centro del pipeline: entre lo que el
+ * motor detecta y lo que el agente decide.
+ */
+.carriles[data-view="full"] {
+  /* Los anchos siguen al CONTENIDO, no a la simetría. Un evento es una línea
+     —mesa, estado, hora— y un intervalo tres; ambos pedían mucho menos ancho
+     del que tenían. Lo que sobra va al medio, donde las tarjetas son párrafos. */
+  grid-template-columns:
+    minmax(0, 0.6fr)
+    minmax(0, 0.72fr)
+    minmax(0, 2.15fr)
+    minmax(0, 1.05fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "eventos intervalos detecciones accion"
+    "eventos intervalos decision    accion";
+  flex: 1;
+  min-height: 0;
+
+  /*
+   * `stretch`, pisando el `align-items: start` de `.carriles`.
+   *
+   * Con `start`, un ítem de grilla se dimensiona por su CONTENIDO en vez de
+   * estirarse al alto de su fila — así que el `minmax(0, 1fr)` de las filas no
+   * lo limitaba: el carril de eventos crecía a lo que midieran 79 tarjetas y
+   * desbordaba la grilla, derramándose sobre el pie de página. Su
+   * `overflow: hidden` no recortaba nada porque el carril MISMO era así de
+   * alto. Toda la cadena de alturas estaba bien; esta línea la anulaba.
+   */
+  align-items: stretch;
+}
+
+.carriles[data-view="full"] .carril[data-lane="eventos"] {
+  grid-area: eventos;
+}
+.carriles[data-view="full"] .carril[data-lane="intervalos"] {
+  grid-area: intervalos;
+}
+.carriles[data-view="full"] .carril[data-lane="detecciones"] {
+  grid-area: detecciones;
+}
+.carriles[data-view="full"] .carril[data-lane="decision"] {
+  grid-area: decision;
+}
+.carriles[data-view="full"] .carril[data-lane="accion"] {
+  grid-area: accion;
+}
+/*
+ * LA MASCOTA PASA A SER EL FONDO de la columna del medio.
+ *
+ * Ocupa las dos filas y se queda DETRÁS de las tarjetas, que al ser de vidrio
+ * la dejan ver a través. Es el uso que el efecto estaba pidiendo: hasta ahora
+ * el vidrio difuminaba un tono plano; ahora tiene una silueta que atravesar.
+ * Sin eventos de puntero, porque es fondo y no un control.
+ */
+.carriles[data-view="full"] .mascota {
+  grid-column: 3;
+  grid-row: 1 / -1;
+  /* La mascota SÍ se centra: el `stretch` de arriba es para los carriles, que
+     tienen que llenar su fila para poder recortar adentro. */
+  align-self: center;
+  justify-self: center;
+  z-index: 0;
+  pointer-events: none;
+  width: min(100%, 34rem);
+  opacity: 0.85;
+}
+
+/* Cada carril se contiene: la lista scrollea adentro y el encabezado no se va
+   de pantalla arrastrado por el contenido. */
+.carriles[data-view="full"] .carril {
+  min-height: 0;
+  overflow: hidden;
+  /* Por encima de la mascota, que ahora es el fondo de la columna. */
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * ESTO es lo que faltaba para que 1 y 2 se limiten.
+ *
+ * El carril es un flex column con altura acotada, pero sin `flex: 1` el `<ol>`
+ * se dimensiona por su CONTENIDO y desborda el contenedor en vez de repartirse
+ * lo que sobra — por eso los 79 eventos seguían de largo hasta el pie de la
+ * pantalla mientras acción, con tres tarjetas, entraba sola.
+ */
+.carriles[data-view="full"] .carril > ol {
+  flex: 1;
+}
+
+/* Las tarjetas de eventos e intervalos se aprietan: una es UNA línea y la otra
+   tres, así que el padding de las tarjetas anchas del medio sobra acá. */
+.carriles[data-view="full"] .carril[data-lane="eventos"] .tarjeta,
+.carriles[data-view="full"] .carril[data-lane="intervalos"] .tarjeta {
+  padding: var(--e2) var(--e3);
+}
+
+.carriles[data-view="full"] .carril[data-lane="eventos"] > ol,
+.carriles[data-view="full"] .carril[data-lane="intervalos"] > ol {
+  gap: var(--e1);
+}
+
+/* ── El cambio de eje de los dos carriles del medio ──────────────────── */
+.carriles[data-view="full"] .carril[data-lane="detecciones"] > ol,
+.carriles[data-view="full"] .carril[data-lane="decision"] > ol {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(15rem, 19rem);
+  grid-template-columns: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-height: none;
+  padding-bottom: var(--e2);
+  scroll-snap-type: x proximity;
+}
+
+.carriles[data-view="full"] .carril[data-lane="detecciones"] > ol > li,
+.carriles[data-view="full"] .carril[data-lane="decision"] > ol > li {
+  scroll-snap-align: start;
+  /* Sin esto la tarjeta se estira al alto de la fila y el texto queda flotando
+     arriba de un bloque vacío. */
+  align-self: start;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.carriles[data-view="simple"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.carril {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+}
+
+.carril[data-visible="no"] {
+  display: none;
+}
+
+.carril-cabeza {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e3);
+  padding-bottom: var(--e2);
+  border-bottom: 1px solid var(--linea);
+}
+
+.carril-orden {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--tinta-tenue);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--medio) var(--salida);
+}
+
+.carril[data-active="si"] .carril-orden {
+  color: var(--oro);
+}
+
+/* El rótulo no se estira: así el piloto queda junto al conteo y no huérfano
+   contra el margen derecho. */
+.carril-rotulo {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--e3);
+  flex-wrap: wrap;
+}
+
+.carril h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.25rem;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  color: var(--tinta);
+}
+
+.carril .conteo {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--tinta-media);
+}
+
+.carril-piloto {
+  --diam: 9px;
+  align-self: center;
+}
+
+.carril > ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--e2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Con los cinco al lado, el rótulo se apila y el conteo reserva dos líneas:
+   sin eso cada carril corta su hairline a una altura distinta y la fila se
+   ve descuadrada. */
+.carriles[data-view="full"] .carril-rotulo {
+  flex-direction: column;
+  gap: 0;
+  flex-wrap: nowrap;
+}
+
+.carriles[data-view="full"] .carril-cabeza {
+  align-items: flex-start;
+}
+
+.carriles[data-view="full"] .carril .conteo {
+  min-height: calc(2 * 1.55em);
+}
+
+/* La lista se queda con lo que sobre de la celda, sin un tope en vh: la grilla
+   ya reparte el alto de la pantalla y un `max-height` fijo volvería a dejar
+   aire muerto abajo, que es justo lo que este layout viene a resolver. */
+.carriles[data-view="full"] .carril > ol {
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+/* ── Vista simple: un solo carril, con aire de verdad ─────────────────── */
+
+.carriles[data-view="simple"] .carril {
+  gap: var(--e4);
+}
+
+.carriles[data-view="simple"] .carril h2 {
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  line-height: 1;
+}
+
+.carriles[data-view="simple"] .carril-orden {
+  font-size: 0.75rem;
+}
+
+.carriles[data-view="simple"] .carril .conteo {
+  font-size: 0.8125rem;
+}
+
+/*
+ * El frame de la vista simple, más contenido.
+ *
+ * Antes ocupaba 64vh con tarjetas de 18rem: con 75 eventos eso era una pared
+ * de tarjetas que empujaba todo lo demás fuera de la pantalla. Achicarlo tiene
+ * dos efectos, y los dos convienen: la etapa se lee como una muestra y no como
+ * un volcado, y hay muchas menos tarjetas con `backdrop-filter` a la vez —
+ * que es lo que sostiene el frame rate ahora que son de vidrio.
+ */
+.carriles[data-view="simple"] .carril > ol {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--e2);
+  max-height: min(42vh, 380px);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   8 · TARJETAS — hojitas de papel, sin relieve
+   ══════════════════════════════════════════════════════════════════════ */
+
+/*
+ * Las tarjetas pasan a vidrio. Dos decisiones que las hacen posibles:
+ *
+ * · SIN refracción. El filtro SVG del hero cuesta caro y acá habría hasta 75
+ *   tarjetas a la vez: sería la misma pila multiplicada por setenta y cinco.
+ *   Queda el desenfoque, que es barato y es lo que da la translucidez.
+ * · El desenfoque es chico (5px) por lo mismo. Un blur grande obliga al
+ *   compositor a muestrear mucho más por tarjeta.
+ *
+ * El fondo ya no es opaco: `--vidrio-papel` a 0.55 deja pasar el tono de la
+ * hoja, que es lo que hace que se lean como vidrio y no como papel.
+ */
+.tarjeta {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio-tarjeta);
+  padding: var(--e3) var(--e4);
+  background: rgb(var(--vidrio-papel) / 0.15);
+  backdrop-filter: blur(8px) saturate(1.16);
+  -webkit-backdrop-filter: blur(8px) saturate(1.16);
+  box-shadow:
+    /* El canto oscuro, para que el filo claro tenga contra qué leerse.
+       La misma lección del hero: sobre fondo claro, blanco solo no existe. */
+    inset 0 0 0 1px rgb(23 20 15 / 0.06),
+    inset 1px 1px 0 0 rgb(255 255 255 / 0.85),
+    inset -1px -1px 0 0 rgb(255 255 255 / 0.55),
+    0 1px 2px rgb(23 20 15 / 0.05);
+  overflow-wrap: anywhere;
+}
+
+/* Sin soporte de backdrop-filter la tarjeta se queda sin translucidez: se
+   vuelve opaca para no dejar el texto sobre el tono de la hoja en crudo. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tarjeta {
+    background: var(--papel-alto);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   EL BORDE ENCENDIDO — sólo decisión y acción
+   ══════════════════════════════════════════════════════════════════════
+
+   Adaptado de `references/spotlight-card.tsx`. La técnica: un degradado
+   radial posicionado en coordenadas de VIEWPORT (`background-attachment:
+   fixed`) y enmascarado para que pinte únicamente el marco. `--x` y `--y` las
+   escribe un solo listener en la raíz — heredan, así que no hace falta uno por
+   tarjeta como en la referencia.
+
+   Van sólo en estos dos carriles a propósito. Eventos, intervalos y
+   detecciones son lo que el motor OBSERVA; decisión y acción son donde el
+   agente INTERVIENE. Que se enciendan las dos últimas y no las primeras dice
+   dónde deja de mirar y empieza a actuar, sin una sola palabra.
+
+   La referencia gira el matiz con la X del cursor; acá el amarillo no rota:
+   esta paleta tiene un solo acento y ese es el punto. */
+
+.tarjeta[data-card="decision"],
+.tarjeta[data-card="accion"],
+/* La fila ganadora del expediente es la misma decisión que la tarjeta del
+   carril 4, contada en grande. Le corresponde el mismo borde vivo: el efecto
+   de page.tsx la recorre sola, porque busca `[data-borde-vivo]` en todo el
+   documento y no dentro de un contenedor. */
+.boleta-fila[data-elegida="si"] {
+  --halo: 220px;
+}
+
+/* El gradiente se posiciona en coordenadas locales, así que el elemento tiene
+   que ser el bloque contenedor de su propio ::after. `.tarjeta` ya trae
+   `position: relative` en su base; la fila de la boleta no. */
+.boleta-fila[data-elegida="si"] {
+  position: relative;
+}
+
+.tarjeta[data-card="decision"]::after,
+.tarjeta[data-card="accion"]::after,
+.boleta-fila[data-elegida="si"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+
+  /* Coordenadas LOCALES a la tarjeta, escritas por el efecto de page.tsx.
+     `background-attachment: fixed` no sirve acá: el `backdrop-filter` de la
+     tarjeta crea un bloque contenedor y `fixed` se resuelve contra ella en vez
+     del viewport, así que todas encendían igual y en el lugar equivocado. */
+  background-image: radial-gradient(
+    var(--halo) var(--halo) at calc(var(--cx, -9999) * 1px) calc(var(--cy, -9999) * 1px),
+    var(--amarillo) 0,
+    rgb(242 194 0 / 0.35) 45%,
+    rgb(242 194 0 / 0) 75%
+  );
+
+  /* La máscara deja pasar sólo el marco: relleno completo menos el interior. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/*
+ * ACCIÓN: el mismo borde MÁS un resplandor que sale hacia afuera.
+ *
+ * La diferencia con decisión no es decorativa. Decidir es interno y
+ * reversible: el agente eligió, nada pasó todavía. Ejecutar sale al mundo —
+ * un mensaje en un canal, un issue en un repo, una notificación en un
+ * teléfono. Que la acción DERRAME luz fuera de su marco y la decisión no, es
+ * esa diferencia dicha con el material.
+ */
+.tarjeta[data-card="accion"]::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: calc(var(--radio-tarjeta) + 6px);
+  pointer-events: none;
+  z-index: -1;
+
+  /* El +6 compensa el `inset: -6px`: sin eso el resplandor quedaría corrido
+     seis píxeles respecto del borde que lo produce. */
+  background-image: radial-gradient(
+    calc(var(--halo) * 1.1) calc(var(--halo) * 1.1) at
+      calc((var(--cx, -9999) + 6) * 1px) calc((var(--cy, -9999) + 6) * 1px),
+    rgb(242 194 0 / 0.55) 0,
+    rgb(242 194 0 / 0) 70%
+  );
+  filter: blur(9px);
+}
+
+/* Una acción que falló no derrama luz: apagarse es cómo esta paleta dice
+   error, igual que el visor de la mascota. */
+.tarjeta[data-card="accion"][data-status="fallo"]::before,
+.tarjeta[data-card="accion"][data-status="omitida"]::before {
+  opacity: 0.25;
+}
+
+.tarjeta-cabeza {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--e1) var(--e2);
+  margin: 0;
+}
+
+.tarjeta .lampara {
+  align-self: center;
+}
+
+.tarjeta .titulo {
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--tinta);
+}
+
+.tarjeta-hora {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--tinta-tenue);
+  font-variant-numeric: tabular-nums;
+}
+
+.tarjeta-texto {
+  margin: var(--e2) 0 0;
+  font-size: 0.8125rem;
+  color: var(--tinta-media);
+  max-width: var(--medida);
+}
+
+.tarjeta dl {
+  margin: var(--e2) 0 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px var(--e3);
+  font-size: 0.75rem;
+}
+
+.tarjeta dt {
+  color: var(--tinta-tenue);
+}
+
+.tarjeta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta);
+}
+
+.tarjeta .dd-texto {
+  color: var(--tinta-media);
+  max-width: var(--medida);
+}
+
+/* Las etiquetas no son chips: son metadatos en voz baja. */
+.tarjeta .etiqueta {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--tinta-tenue);
+}
+
+.tarjeta .sello {
+  font-size: 0.6875rem;
+  font-style: italic;
+  color: var(--oro);
+}
+
+.tarjeta .etiqueta[data-severity="high"],
+.tarjeta .etiqueta[data-severity="medium"] {
+  color: var(--oro);
+}
+
+/* Silenciadas: la hoja se apaga contra el papel de fondo, no se tacha. */
+.tarjeta[data-status="suprimida"],
+.tarjeta[data-status="fuera-de-cupo"] {
+  background: transparent;
+  border-style: dashed;
+}
+
+.tarjeta[data-status="suprimida"] .titulo,
+.tarjeta[data-status="fuera-de-cupo"] .titulo {
+  color: var(--tinta-media);
+  font-weight: 500;
+}
+
+/* Intervalo abierto: la hoja queda sin cerrar por abajo. */
+.tarjeta[data-open="si"] {
+  border-bottom-style: dashed;
+}
+
+/* Cargando: papel hundido y punto latiendo. */
+.tarjeta[data-status="pendiente"] {
+  background: var(--papel-hondo);
+  border-color: var(--linea);
+}
+
+/* Falla: lavado amarillo y hairline de oro. Sin franja, sin borde grueso. */
+.tarjeta[data-status="error"],
+.tarjeta[data-status="fallo"] {
+  background: var(--amarillo-palido);
+  border-color: var(--oro);
+}
+
+.tarjeta .aviso {
+  color: var(--tinta);
+  font-weight: 600;
+}
+
+/* De dónde vino: lo real se dice con oro; lo pregrabado o simulado queda en
+   itálica, como una nota al margen. */
+.tarjeta[data-source="claude"] .etiqueta[data-tag="fuente"],
+.tarjeta[data-source="real"] .etiqueta[data-tag="fuente"] {
+  color: var(--oro);
+}
+
+.tarjeta[data-source="pregrabada"] .etiqueta[data-tag="fuente"],
+.tarjeta[data-source="simulada"] .etiqueta[data-tag="fuente"] {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--tinta-tenue);
+}
+
+/* Vacío: una línea en itálica, no una zona rayada. */
+.vacio {
+  margin: 0;
+  padding: var(--e6) 0;
+  color: var(--tinta-tenue);
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  font-style: italic;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   9 · MASCOTA — el Reflex Agent, redibujado en papel y tinta.
+        Sigue viviendo bajo el carril único y sigue mirando al cursor.
+        Su refinamiento propio queda pendiente (DESIGN.md § Pendiente).
+   ══════════════════════════════════════════════════════════════════════ */
+
+.mascota {
+  --lx: -0.32;
+  --ly: -0.5;
+  margin: 0;
+  padding: var(--e6) 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e4);
+  align-self: center;
+  /*
+   * Los DOS ejes, porque la mascota vive adentro de una grilla.
+   *
+   * Cuando colgaba de `.escena` —un flex en columna— `align-self: center` la
+   * centraba horizontalmente, porque ahí ese es el eje transversal. Adentro de
+   * `.carriles` el mismo `align-self` pasó a gobernar el eje vertical y el
+   * horizontal quedó sin nadie: con `justify-self: auto` y un `width`
+   * explícito, el ítem cae al arranque de la columna. Medido en la vista de un
+   * carril: 0 px de holgura a la izquierda y 902 a la derecha.
+   *
+   * En un contenedor flex `justify-self` se ignora, así que ponerlo acá no
+   * rompe nada si la mascota vuelve a mudarse.
+   */
+  justify-self: center;
+  width: min(100%, 30rem);
+}
+
+.mascota-svg {
+  width: min(100%, 220px);
+  height: auto;
+  overflow: visible;
+}
+
+/*
+ * ACTO II — el bot se asoma por el borde derecho.
+ *
+ * En el recorrido (carriles 1-3) la mascota cuelga abajo del carril y ahí
+ * funciona: es lo único que hay debajo. En el expediente NO, porque abajo
+ * viven el embudo, el caso, la boleta y la consecuencia — el bot terminaba
+ * empujado fuera del frame y no se veía nunca.
+ *
+ * `data-acto` ya lo escribía page.tsx desde la Task 10 y no tenía una sola
+ * regla que lo leyera. Es el mismo hueco que dejó `.escenario[data-visible]`,
+ * así que acá se cierra en vez de inventar un atributo nuevo.
+ *
+ * Sale del flujo para no robarle ancho al expediente, y se ancla arriba a la
+ * derecha, que es la zona que quedó libre: el título y el embudo van a la
+ * izquierda y la regleta al centro.
+ *
+ * ENTERO, no recortado: se apoya contra el borde derecho pero no lo cruza.
+ * Un bot cortado por la mitad se lee como un defecto de layout —igual que se
+ * leía cuando quedaba fuera del frame— y no como una decisión.
+ */
+.carriles[data-view="simple"][data-acto="expediente"] {
+  position: relative;
+}
+
+.carriles[data-view="simple"][data-acto="expediente"] .mascota {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 11rem;
+  padding: 0;
+  gap: 0;
+  /* Es decorado, no un control: no puede comerse un clic de la boleta. */
+  pointer-events: none;
+}
+
+/* El pie (nombre y detalle) se va en este acto: lo que dice ya lo narra el
+   expediente entero, y acá el bot es presencia, no una ficha con rótulo. */
+.carriles[data-view="simple"][data-acto="expediente"] .mascota-pie {
+  display: none;
+}
+
+/*
+ * Angosto: no hay margen derecho del que asomarse sin taparle texto a la
+ * boleta, así que vuelve al flujo y se apoya debajo, como en el recorrido.
+ */
+@media (max-width: 60rem) {
+  .carriles[data-view="simple"][data-acto="expediente"] .mascota {
+    position: static;
+    width: min(100%, 30rem);
+    padding: var(--e6) 0 0;
+    gap: var(--e4);
+  }
+
+  .carriles[data-view="simple"][data-acto="expediente"] .mascota-pie {
+    display: flex;
+  }
+}
+
+/* Silueta de tinta sobre papel. */
+.m-cuerpo,
+.m-cuerpo rect {
+  fill: var(--tinta);
+}
+
+.m-hueco {
+  fill: var(--papel);
+}
+
+/* El único amarillo del robot: la antena. Con su aro, como cualquier punto
+   de luz de la página. */
+.m-antena-lente {
+  fill: var(--amarillo);
+}
+
+.m-antena-aro {
+  stroke: var(--punto-aro);
+  stroke-width: 1.25;
+  fill: none;
+}
+
+.m-numero {
+  fill: var(--tinta);
+  font-family: var(--texto);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+}
+
+/* La sombra de piso es una elipse plana de papel hundido: se corre al lado
+   opuesto de la luz. Recorte de papel, no relieve. */
+.m-sombra-piso {
+  fill: var(--papel-hondo);
+  transform: translate(calc(var(--lx) * -22px), 0) scaleX(calc(1 + var(--lx) * 0.1));
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 90ms linear;
+}
+
+/* Un lavado suave que se corre con la luz. Es una aguada, no un especular. */
+.m-lavado-centro {
+  stop-color: var(--papel);
+  stop-opacity: 0.16;
+}
+.m-lavado-borde {
+  stop-color: var(--papel);
+  stop-opacity: 0;
+}
+
+.m-lavado {
+  transform: translate(calc(var(--lx) * 46px), calc(var(--ly) * 26px));
+  transition: transform 90ms linear;
+}
+
+/*
+ * EL IRIS. Antes eran dos pupilas redondas con 3.4px de recorrido: se movían
+ * tan poco que la mirada parecía fija. Ahora es una sola pupila alargada que
+ * cruza casi todo el visor —±42px— y por eso se lee como algo que REACCIONA.
+ * La transición es de 40ms, apenas por encima de un cuadro: el ojo llega antes
+ * que la cabeza, que es lo que hace un centinela de verdad.
+ */
+.m-pupilas rect {
+  fill: var(--tinta);
+}
+
+.m-pupilas {
+  transform: translate(calc(var(--lx) * 42px), calc(var(--ly) * 5px));
+  transition: transform 40ms linear;
+}
+
+/* El núcleo del iris es papel: un destello de lente dentro de la tinta. */
+.m-iris-nucleo {
+  fill: var(--papel);
+  opacity: 0.5;
+}
+
+/*
+ * EL CONTORNO DEL VISOR, encendido en amarillo.
+ *
+ * Rompe a propósito la regla de que la antena es el único amarillo del robot,
+ * y la rompe por la razón correcta: la mirada es lo que define a este
+ * personaje, así que es lo que tiene permitido encenderse. La antena dice el
+ * estado; el visor dice qué ES.
+ *
+ * El resplandor va en dos capas —cerca y lejos— por lo mismo que el canto del
+ * hero: un halo de un solo radio se lee como una calcomanía, y dos con
+ * distinta caída se leen como luz.
+ */
+.m-visor {
+  stroke: var(--amarillo);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  filter:
+    drop-shadow(0 0 4px rgb(242 194 0 / 0.75))
+    drop-shadow(0 0 13px rgb(242 194 0 / 0.45));
+}
+
+/* Apagado antes de arrancar, igual que la antena y el barrido: el agente
+   todavía no está mirando, así que el ojo no ilumina nada. */
+.mascota[data-mascota="inicio"] .m-visor {
+  stroke: var(--linea-fuerte);
+  stroke-width: 1.5;
+  filter: none;
+}
+
+/* Con el motor corriendo el ojo respira, muy despacio. Es el mismo latido
+   lento del canto del hero, no un parpadeo propio: dos pulsos distintos en la
+   misma pantalla compiten. */
+@media (prefers-reduced-motion: no-preference) {
+  .mascota[data-mascota="corriendo"] .m-visor {
+    animation: m-visor-latido 2.6s ease-in-out infinite;
+  }
+}
+
+@keyframes m-visor-latido {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgb(242 194 0 / 0.75)) drop-shadow(0 0 13px rgb(242 194 0 / 0.45));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgb(242 194 0 / 0.9)) drop-shadow(0 0 20px rgb(242 194 0 / 0.6));
+  }
+}
+
+/* En error el ojo se apaga a tinta. Esta paleta tiene un solo acento —no hay
+   rojo— así que la falla no se dice con color sino quitando la luz: un
+   centinela que falló no sigue brillando como si todo estuviera bien. */
+.mascota[data-mascota="error"] .m-visor {
+  stroke: var(--tinta);
+  stroke-width: 2;
+  filter: none;
+}
+
+/*
+ * EL BARRIDO. Una banda clara que cruza el visor sin parar. Es lo que
+ * distingue una mirada ACTIVA de un ojo pintado: aunque el cursor esté quieto,
+ * el centinela sigue rastrillando.
+ * Va recortado por la ranura del visor, así que no puede salirse de la mirada.
+ */
+.m-barrido {
+  fill: var(--papel);
+  opacity: 0.34;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .m-barrido {
+    animation: m-rastrillar 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+}
+
+@keyframes m-rastrillar {
+  0% {
+    transform: translateX(0);
+  }
+  /* La vuelta es más lenta que la ida y hay una pausa al final: un barrido
+     que va y viene a velocidad pareja se lee como un péndulo, no como algo
+     que busca. */
+  55%,
+  100% {
+    transform: translateX(250px);
+  }
+}
+
+/* Antes de arrancar no rastrilla: el agente todavía no está mirando. */
+.mascota[data-mascota="inicio"] .m-barrido {
+  animation: none;
+  opacity: 0;
+}
+
+/* El párpado es una persiana única del color del visor: al bajar se come la
+   mirada entera de un golpe. */
+.m-parpados rect {
+  fill: var(--papel);
+  transform: scaleY(0);
+  transform-origin: top;
+  transform-box: fill-box;
+  transition: transform var(--medio) var(--salida);
+}
+
+.mascota[data-mascota="inicio"] .m-parpados rect {
+  transform: scaleY(1);
+}
+
+/*
+ * La cabeza se orienta a la luz, y ahora también se inclina hacia ella: un
+ * centinela que rastrea no sólo gira, se ASOMA. El giro subió de 3.2° a 5°
+ * y la transición bajó de 90ms a 70ms — más rápida que antes, pero todavía
+ * más lenta que el iris. Ese desfasaje es lo que hace que la mirada parezca
+ * llegar primero y el cuerpo seguirla.
+ */
+.m-cabeza {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  transform: rotate(calc(var(--lx) * 5deg)) translateX(calc(var(--lx) * 4px));
+  transition: transform 70ms linear;
+}
+
+/* Antes de arrancar la antena está apagada: aro sin núcleo, igual que
+   cualquier punto de luz apagado de la página. */
+.mascota[data-mascota="inicio"] .m-antena-lente {
+  fill: var(--papel);
+}
+
+.mascota[data-mascota="inicio"] .m-antena-aro {
+  stroke: var(--linea-fuerte);
+}
+
+/* Falla: el punto se apaga del todo y el aro se engrosa en tinta. Sin un
+   segundo color — esta paleta tiene uno solo. */
+.mascota[data-mascota="error"] .m-antena-lente {
+  fill: var(--papel);
+}
+
+.mascota[data-mascota="error"] .m-antena-aro {
+  stroke: var(--tinta);
+  stroke-width: 2.5;
+}
+
+.mascota[data-mascota="error"] .mascota-detalle {
+  color: var(--tinta);
+  font-weight: 600;
+}
+
+.mascota-pie {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e1);
+  text-align: center;
+}
+
+.mascota-nombre {
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+  color: var(--tinta);
+}
+
+.mascota-detalle {
+  font-size: 0.75rem;
+  color: var(--tinta-media);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   10 · PIE
+   ══════════════════════════════════════════════════════════════════════ */
+
+.pie {
+  margin-top: var(--e8);
+  border-top: 1px solid var(--linea);
+  padding-top: var(--e5);
+}
+
+.leyenda {
+  margin: 0;
+  max-width: var(--medida);
+  font-size: 0.75rem;
+  line-height: 1.7;
+  color: var(--tinta-media);
+  text-wrap: pretty;
+}
+
+.leyenda code {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--tinta);
+  background: var(--papel-hondo);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   11 · MOVIMIENTO
+
+        Dos cosas se mueven en esta página, y son distintas:
+
+        · El CAMPO DE FLUJO (§ 4) es ambiente. Corre siempre, lento, detrás
+          del vidrio. Es el fondo que pidió el humano.
+
+        · El MOMENTO AUTORAL es uno solo y es el motor barriendo las cinco
+          etapas: el carril entra desde el lado hacia el que avanzó, las
+          hojitas se apoyan escalonadas, y las cinco pestañas se encienden
+          detrás. Una sola curva para las tres, y todo arranca de un default
+          YA VISIBLE.
+
+        No hay entrada al hacer scroll ni animación idéntica por sección.
+   ══════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: no-preference) {
+  .carriles[data-view="simple"] .carril[data-visible="si"] {
+    animation: entra-adelante var(--medio) var(--salida) both;
+  }
+
+  .carriles[data-view="simple"][data-sentido="atras"] .carril[data-visible="si"] {
+    animation-name: entra-atras;
+  }
+
+  .carril[data-active="si"] .tarjeta {
+    animation: aparece var(--medio) var(--salida) backwards;
+    animation-delay: calc(var(--i, 0) * 18ms);
+  }
+
+  /* Un punto de luz en vuelo late. Es carga, no adorno. */
+  .lampara[data-beat="si"] {
+    animation: latido 1.3s ease-in-out infinite;
+  }
+}
+
+@keyframes entra-adelante {
+  from {
+    opacity: 0;
+    transform: translateX(26px);
+  }
+}
+
+@keyframes entra-atras {
+  from {
+    opacity: 0;
+    transform: translateX(-26px);
+  }
+}
+
+@keyframes aparece {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes latido {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   12 · ANCHOS Y ALTURAS
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Pantalla baja: el título cede altura para que las pestañas sigan
+   entrando en el primer frame. */
+@media (max-height: 760px) and (min-width: 901px) {
+  .titular-nombre {
+    font-size: clamp(2.6rem, 9vw, 7rem);
+  }
+
+  .titular-lema {
+    font-size: clamp(1rem, 2.8vw, 1.75rem);
+  }
+
+  .hero-centro {
+    padding-block: var(--e3);
+  }
+}
+
+/* Pantalla alta y angosta (tableta en vertical): el título se mide contra el
+   ancho, así que a 834×1112 quedaba chico y abría un vacío enorme. */
+@media (min-width: 641px) and (min-aspect-ratio: 1/2) and (max-aspect-ratio: 9/10) {
+  .titular-nombre {
+    font-size: clamp(3.2rem, 17vw, 9.5rem);
+  }
+
+  .titular-lema {
+    font-size: clamp(1.15rem, 5vw, 2.6rem);
+  }
+}
+
+@media (max-width: 1280px) {
+  .carriles[data-view="full"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .hoja {
+    padding-bottom: var(--e7);
+  }
+
+  .carriles[data-view="full"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mando {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* En columna, `flex-basis` pasa a ser altura: sin esto la barra de mando
+     se estira a 18rem de alto. */
+  .visor-mando {
+    flex: none;
+    justify-content: space-between;
+  }
+
+  /* Cinco pestañas no entran de frente en un teléfono: la banda se arrastra
+     de costado, cada pestaña arranca ENTERA —no hay cursor del que estar
+     cerca— y se abre al tocarla. */
+  .pestanas {
+    height: clamp(6rem, 16vh, 8rem);
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 2px;
+    gap: var(--e2);
+    padding-bottom: var(--e3);
+  }
+
+  .pestana {
+    flex: 0 0 min(56%, 13rem);
+    scroll-snap-align: start;
+    align-items: flex-end;
+  }
+
+  .pestana-boton {
+    width: 100%;
+  }
+
+  .pestana-titulo {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 14px;
+  }
+
+  /* El padding vive en el cuerpo, no en la superficie: el filo y los
+     especulares del vidrio tienen que dar la vuelta completa. */
+  .hero-cuerpo {
+    padding-inline: var(--e4);
+  }
+
+  /* En un teléfono el salto de escala se mantiene achicando el cuerpo, no
+     achicando el título: el título es lo que manda. */
+  .titular-nombre {
+    font-size: clamp(3.1rem, 16vw, 5rem);
+  }
+
+  .portada-bajada {
+    margin-top: var(--e5);
+    font-size: 0.8125rem;
+  }
+
+  .escena {
+    padding-top: var(--e6);
+  }
+
+  /* En pantalla angosta la grilla de cuatro columnas no entra: los cinco
+     carriles se apilan y cada uno vuelve a scrollear a lo alto, incluidos los
+     dos que en escritorio corren a lo ancho. */
+  .carriles[data-view="full"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: none;
+    min-height: 0;
+  }
+
+  .escena[data-view="full"] {
+    min-height: 0;
+  }
+
+  .carriles[data-view="full"] .carril,
+  .carriles[data-view="full"] .mascota {
+    grid-area: auto;
+  }
+
+  .carriles[data-view="full"] .carril > ol {
+    max-height: 42vh;
+  }
+
+  .carriles[data-view="full"] .carril[data-lane="detecciones"] > ol,
+  .carriles[data-view="full"] .carril[data-lane="decision"] > ol {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 42vh;
+  }
+
+  .carriles[data-view="simple"] .carril > ol {
+    max-height: 58vh;
+  }
+
+  .consola-resumen {
+    display: none;
+  }
+
+  .visor-posicion {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    text-align: center;
+  }
+
+  .mascota-svg {
+    width: min(100%, 180px);
+  }
+
+  .pie {
+    margin-top: var(--e7);
+  }
+}
+
+/* ── EL EXPEDIENTE ─────────────────────────────────────────────────────────
+   El clímax. La única parte de la página que no se parece a un log: por eso
+   no reusa .carril ni .tarjeta. */
+
+.expediente {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;              /* la cadena de altura no se afloja acá:
+                                 ver docs/design/medir.mjs y la lección del
+                                 layout de los cinco carriles */
+  overflow-y: auto;
+}
+
+.embudo {
+  font-variant-numeric: tabular-nums;
+}
+
+.embudo-callado {
+  color: var(--tinta-tenue);
+}
+
+/* El cupo va en renglón propio: no es contención del motor, es el tope de la
+   demo, y sumarlo a los callados sería mentir con un número. */
+.embudo-cupo {
+  display: block;
+  color: var(--tinta-tenue);
+  font-size: 0.875em;
+}
+
+/* ── EL ENCABEZADO DEL CASO ────────────────────────────────────────────────
+   Venía SIN una sola regla propia: se renderizaba con los defaults del
+   navegador —márgenes de <p> y <dl>, y el margin-inline-start de 40px que el
+   agente de usuario le pone a cada <dd>—. Eso lo dejaba en 246px de alto y
+   con los valores sangrados, cuando el contenido es una identidad, una regla
+   y tres medidas.
+
+   Ahora es UN renglón: identidad y medidas comparten línea, y la regla baja
+   al pie. Los datos suben y la descripción acompaña. */
+
+/*
+ * El encabezado va adentro de un panel de vidrio.
+ *
+ * Vidrio de NIVEL 2 en DESIGN.md § Vidrio líquido, igual que la regleta: SIN
+ * refracción, porque detrás hay papel casi plano y no el campo de líneas.
+ *
+ * `z-index: 1` NO es decorativo. La mascota del acto está en `position:
+ * absolute` arriba a la derecha, y un elemento posicionado se pinta por
+ * encima de uno que no lo está — o sea que el bot se dibujaría sobre los
+ * datos del caso. Acá el orden se fija a mano en vez de quedar librado a esa
+ * regla: el contenido gana, el decorado queda atrás.
+ */
+.caso-vidrio {
+  position: relative;
+  z-index: 1;
+  padding: var(--e3) var(--e4);
+}
+
+.caso-vidrio .caso-cabeza {
+  width: 100%;
+}
+
+.caso-cabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--e2) var(--e3);
+}
+
+.caso-cabeza .caso-identidad,
+.caso-cabeza .caso-regla,
+.caso-cabeza .caso-evidencia {
+  margin: 0;
+}
+
+.caso-identidad,
+.caso-evidencia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.caso-identidad {
+  gap: var(--e2);
+}
+
+.caso-evidencia {
+  gap: var(--e2) var(--e3);
+}
+
+.caso-dato {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e1);
+}
+
+/* El peso separa la etiqueta del valor, y nada más: la etiqueta NO va en
+   tinta apagada ni a menor tamaño, porque las dos cosas cancelan la negrilla
+   en vez de acompañarla. */
+.caso-dato dt {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Cifras de ancho fijo: ahora que las medidas están en fila se comparan entre
+   sí, y sin esto bailan al cambiar de caso. Mismo trato que `.embudo`. */
+.caso-dato dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* El mismo separador que usa el embudo más arriba. Decorativo: va en ::after
+   para que no lo lea un lector de pantalla ni se copie con el texto. */
+.caso-dato:not(:last-child)::after {
+  content: "·";
+  margin-left: var(--e2);
+  color: var(--linea-fuerte);
+}
+
+.caso-regla {
+  flex-basis: 100%;
+  color: var(--tinta-media);
+  font-size: 0.9375em;
+}
+
+.caso-entidad {
+  color: var(--tinta-media);
+}
+
+/*
+ * LA REGLETA: tres píldoras de vidrio, centradas.
+ *
+ * Cada botón ES la superficie —el marcado lo arma `useVidrio` en
+ * expediente.tsx— así que esta hoja no pinta fondo ni borde: los pone la
+ * cadena de `.vidrio`. De ahí el `border: 0` y el `background: none`, que no
+ * son un reset perezoso sino la condición para que el vidrio se vea.
+ *
+ * Es vidrio de NIVEL 2 en DESIGN.md § Vidrio líquido: apoyado sobre `.hoja` y
+ * no sobre el campo de líneas, así que va SIN refracción — sobre papel casi
+ * plano no hay estructura que doblar y emitir el filtro costaría cuadros por
+ * un efecto invisible. La lista del nivel 2 es CERRADA: si aparece una
+ * superficie nueva que quiere vidrio, se edita esa lista, no este archivo.
+ */
+.regleta {
+  display: flex;
+  justify-content: center;
+  gap: var(--e2);
+}
+
+.regleta-chip {
+  /* 44px: el piso de un blanco que se toca con el dedo. */
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 var(--e3);
+  border: 0;
+  background: none;
+  color: var(--tinta-media);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+
+  /*
+   * `.vidrio` ya declaró `display: flex; flex-direction: column`, así que el
+   * botón NO centra su contenido como lo haría un <button> normal: el número
+   * es un ítem de columna y queda arriba. Estas dos líneas lo centran en los
+   * dos ejes —`justify-content` es el vertical acá, por la dirección column—.
+   * `line-height: 1` saca el descuelgue de la caja de línea, que sobre una
+   * píldora chica corre el dígito un par de píxeles hacia abajo.
+   */
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/*
+ * El caso en pantalla enciende su filo, exactamente como la pestaña que el
+ * visor está mirando (`--vidrio-marca`, más arriba en esta hoja). Es el
+ * vocabulario que la página ya tiene para "esta superficie de vidrio está
+ * encendida", y reusarlo hace que las dos se lean como el mismo sistema.
+ *
+ * El filo NO viaja solo: el amarillo sobre claro da 1.46:1 y no alcanza para
+ * comunicar un estado por sí mismo. El peso y la tinta plena son el segundo
+ * canal, y son los que sostienen la distinción sin depender del color.
+ */
+.regleta-chip[aria-pressed="true"] {
+  --vidrio-marca: inset 0 0 0 1.5px var(--amarillo);
+  color: var(--tinta);
+  font-weight: 500;
+}
+
+/* ── LA BOLETA ─────────────────────────────────────────────────────────── */
+
+.boleta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+}
+
+.boleta-fila {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio-tarjeta);
+  background: var(--papel-alto);
+}
+
+/* La ganadora lleva la luz; el resto no. El aro (--punto-aro) es el que carga
+   el contraste: sobre papel el amarillo solo no llega a 3:1. */
+.boleta-fila[data-elegida="si"] {
+  border-color: var(--punto-aro);
+  box-shadow: inset 3px 0 0 var(--amarillo);
+}
+
+/* Las descartadas se hunden, no se tachan: siguen siendo legibles porque su
+   motivo es la mitad del argumento. */
+.boleta-fila[data-descartada="si"] {
+  background: var(--papel-hondo);
+  color: var(--tinta-media);
+}
+
+/* La marca NO es el único diferenciador: cada fila lleva su texto de motivo.
+   Nada acá se distingue sólo por color. */
+.boleta-fila[data-elegida="si"] .boleta-marca::before { content: "●"; }
+.boleta-fila[data-descartada="si"] .boleta-marca::before { content: "○"; }
+.boleta-fila[data-estado="sin-resolver"] .boleta-marca::before { content: "·"; }
+
+.boleta-mensaje {
+  margin: 0.5rem 0 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--linea-fuerte);
+  max-width: var(--medida);
+  font-family: var(--serif);
+  font-style: italic;
+}
+
+.boleta-motivo {
+  max-width: var(--medida);
+}
+
+/*
+ * El rótulo de cada texto de la boleta.
+ *
+ * Mismo registro que los `dt` de las tarjetas (0.75rem, --tinta-tenue,
+ * minúscula): es la voz que la página ya tiene para "esto es el nombre de un
+ * campo". Deliberadamente NO es un eyebrow en mayúsculas con tracking — eso
+ * sería inventar una gramática nueva para decir lo mismo, y además la
+ * repetiría tres veces por fila.
+ *
+ * En renglón propio y no en línea: los textos que rotula son de largo muy
+ * distinto —una descripción de config es corta, un motivo del modelo son dos
+ * o tres renglones— y un rótulo en línea deja la primera línea desalineada
+ * contra las otras.
+ */
+.boleta-rotulo {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.75rem;
+  color: var(--tinta-tenue);
+}
+
+/* El rótulo del mensaje es hermano del blockquote, no va adentro: la cita
+   tiene que contener SÓLO lo que el agente escribió. Le toca el mismo aire
+   que la cita ya se daba a sí misma. */
+.boleta-rotulo + .boleta-mensaje {
+  margin-top: 2px;
+}
+
+.boleta-descripcion + .boleta-rotulo,
+.boleta-motivo + .boleta-rotulo,
+.boleta-descripcion ~ .boleta-rotulo {
+  margin-top: 0.5rem;
+}
+
+/* El contrafáctico es la línea que convierte una opinión en un criterio: se
+   dice en la serif y en el tono del acento oscuro, que sí sostiene contraste
+   sobre papel (el amarillo plano no). */
+.contrafactual {
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  color: var(--oro);
+  max-width: var(--medida);
+}
+
+.consecuencia {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--linea);
+  font-variant-numeric: tabular-nums;
+}
+
+.consecuencia-detalle {
+  font-family: var(--mono);
+  color: var(--tinta-media);
+}
+
+/* `ignore` ganando NO es un fallo: es una decisión. No se atenúa. */
+.consecuencia[data-consecuencia="omitida"] {
+  color: var(--tinta);
+}
+
+.consecuencia[data-consecuencia="fallo"] {
+  color: var(--tinta);
+  border-top-color: var(--linea-fuerte);
+}
+
+.boton-epilogo {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+}
+
+/* ── EL ESCALONADO ─────────────────────────────────────────────────────────
+   Se lee "eligió esto… y descartó esto, y esto". No finge una deliberación
+   secuencial que no ocurrió: el modelo responde de una.
+
+   Mismo patrón de --i que ya usan las tarjetas (page.tsx:502). CSS a mano:
+   framer-motion se rechazó tres veces durante el pase visual. */
+
+.boleta-fila,
+.contrafactual {
+  animation: entrar-escalonado 320ms ease-out backwards;
+  animation-delay: calc(var(--i, 0) * 200ms);
+}
+
+@keyframes entrar-escalonado {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boleta-fila,
+  .contrafactual {
+    animation: none;
+  }
+}
+
+/*
+ * EL ESCENARIO DEL EXPEDIENTE.
+ *
+ * `page.tsx` venía marcando `data-visible` desde la Task 10 y no había regla
+ * que lo leyera, así que el expediente se veía también durante los carriles
+ * 1-3. El atributo existía; el estilo no. Se cierra acá.
+ */
+.escenario[data-visible="no"] {
+  display: none;
+}

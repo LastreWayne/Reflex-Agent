@@ -1,0 +1,626 @@
+import { createMemoryStore } from "../adapters/store/memory.js"
+import type { ExecutionResult } from "../adapters/executors/index.js"
+import { detect, suppress } from "../engine/detector.js"
+import { toIntervals } from "../engine/intervals.js"
+import type {
+  Action,
+  Detection,
+  DomainConfig,
+  Interval,
+  NormalizedEvent,
+  Severity,
+  Verdict,
+} from "../engine/schema.js"
+import { simulateRestaurant } from "../simulators/restaurant.js"
+import { simulateVolt } from "../simulators/volt-ocpp.js"
+import { CONFIGS, DOMAIN_IDS, type DomainId } from "./domains.js"
+
+/**
+ * Todo lo que corre en el navegador vive acá: simulador → intervalos →
+ * detección → supresión. Es código puro, sin React, sin fetch y sin reloj:
+ * `page.tsx` le pasa los parámetros y él devuelve una foto completa de la
+ * corrida. Así el pipeline se puede testear sin montar un DOM.
+ */
+
+/** Fin de la ventana simulada por defecto. Fijo a propósito: mismo seed → mismos timestamps. */
+export const DEFAULT_AT = "2026-07-26T20:00:00.000Z"
+
+/** Duración de la ventana simulada: 3 horas. */
+export const WINDOW_MS = 3 * 60 * 60_000
+
+/** Cuántas entidades genera cada dominio. */
+export const ENTITY_COUNT: Record<DomainId, number> = { volt: 6, restaurant: 12 }
+
+/** Tope de detecciones que llegan a decidir+ejecutar. Acota costo y tiempo de la demo. */
+export const DEFAULT_MAX_DECISIONS = 3
+
+export type OfflineMode =
+  /** Todo en vivo: `/api/decide` y `/api/execute`. */
+  | "off"
+  /** Decisiones pregrabadas; la acción igual se ejecuta de verdad. */
+  | "decide"
+  /** Decisiones pregrabadas y ejecución simulada. Cero red saliente, cero créditos. */
+  | "full"
+
+export interface DemoParams {
+  domain: DomainId
+  seed: number
+  offline: OfflineMode
+  forceIncident: boolean
+  maxDecisions: number
+  /** ISO del instante en que se evalúa el motor. También el fin de la ventana. */
+  at: string
+}
+
+export const DEFAULT_PARAMS: DemoParams = {
+  domain: "volt",
+  seed: 42,
+  offline: "off",
+  forceIncident: false,
+  maxDecisions: DEFAULT_MAX_DECISIONS,
+  at: DEFAULT_AT,
+}
+
+function isDomainId(value: string | null): value is DomainId {
+  return value !== null && (DOMAIN_IDS as readonly string[]).includes(value)
+}
+
+function parseOffline(value: string | null): OfflineMode {
+  if (value === null) return "off"
+  if (value === "decide") return "decide"
+  if (value === "0" || value === "" || value === "false") return "off"
+  return "full"
+}
+
+function parsePositiveInt(value: string | null, fallback: number): number {
+  if (value === null) return fallback
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+/**
+ * Lee `?domain=`, `?seed=`, `?offline=`, `?force=`, `?max=` y `?at=`.
+ * Cualquier valor inválido cae al default en vez de romper: la demo nunca
+ * debe quedarse en blanco por una URL mal tipeada.
+ */
+export function parseParams(search: string): DemoParams {
+  const q = new URLSearchParams(search)
+  const domain = q.get("domain")
+  const at = q.get("at")
+
+  return {
+    domain: isDomainId(domain) ? domain : DEFAULT_PARAMS.domain,
+    seed: parsePositiveInt(q.get("seed"), DEFAULT_PARAMS.seed),
+    offline: parseOffline(q.get("offline")),
+    forceIncident: q.get("force") === "1",
+    maxDecisions: parsePositiveInt(q.get("max"), DEFAULT_MAX_DECISIONS),
+    at: at !== null && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : DEFAULT_AT,
+  }
+}
+
+/** El inverso de `parseParams`: sólo escribe lo que se aparta del default. */
+export function toSearch(params: DemoParams): string {
+  const q = new URLSearchParams()
+  q.set("domain", params.domain)
+  q.set("seed", String(params.seed))
+  if (params.forceIncident) q.set("force", "1")
+  if (params.offline === "full") q.set("offline", "1")
+  if (params.offline === "decide") q.set("offline", "decide")
+  if (params.maxDecisions !== DEFAULT_MAX_DECISIONS) q.set("max", String(params.maxDecisions))
+  if (params.at !== DEFAULT_AT) q.set("at", params.at)
+  return `?${q.toString()}`
+}
+
+/**
+ * Qué vista del pipeline se está mirando.
+ *
+ * Vive aparte de `DemoParams` a propósito: `page.tsx` re-corre el motor (y
+ * vuelve a pagarle a Claude) cada vez que cambia el objeto de params, y
+ * cambiar de vista no debe re-correr nada.
+ */
+export type ViewMode = "simple" | "full"
+
+export const DEFAULT_VIEW: ViewMode = "simple"
+
+/** Lee `?view=`. Cualquier valor que no sea `full` cae en la vista simple. */
+export function parseView(search: string): ViewMode {
+  return new URLSearchParams(search).get("view") === "full" ? "full" : DEFAULT_VIEW
+}
+
+/** `toSearch` más la vista, para el `replaceState` de la página. */
+export function toSearchWithView(params: DemoParams, view: ViewMode): string {
+  const q = new URLSearchParams(toSearch(params))
+  if (view !== DEFAULT_VIEW) q.set("view", view)
+  return `?${q.toString()}`
+}
+
+export type SuppressionReason = "dedup" | "cooldown"
+
+export interface ClassifiedDetection {
+  detection: Detection
+  /** Descripción de la regla que la disparó, para no repetir el lookup en la UI. */
+  ruleDescription: string
+  status: "pasa" | "suprimida" | "fuera-de-cupo"
+  suppressedBy: SuppressionReason | null
+}
+
+export interface RunSnapshot {
+  config: DomainConfig
+  from: Date
+  now: Date
+  events: NormalizedEvent[]
+  intervals: Interval[]
+  classified: ClassifiedDetection[]
+  /** Las detecciones que efectivamente van a decidir+ejecutar, en orden. */
+  queued: Detection[]
+}
+
+const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
+
+function simulate(params: DemoParams, from: Date): NormalizedEvent[] {
+  const common = {
+    seed: params.seed,
+    from,
+    durationMs: WINDOW_MS,
+    forceIncident: params.forceIncident,
+  }
+  return params.domain === "volt"
+    ? simulateVolt({ ...common, stations: ENTITY_COUNT.volt })
+    : simulateRestaurant({ ...common, tables: ENTITY_COUNT.restaurant })
+}
+
+/**
+ * Corre el pipeline entero de una sola vez y devuelve la foto.
+ *
+ * Determinista por construcción: el seed fija los eventos y `params.at` fija
+ * el instante de evaluación. Dos llamadas con los mismos params devuelven
+ * exactamente lo mismo, hasta el timestamp.
+ */
+export function buildRun(params: DemoParams): RunSnapshot {
+  const config = CONFIGS[params.domain]
+  const now = new Date(params.at)
+  const from = new Date(now.getTime() - WINDOW_MS)
+
+  const events = simulate(params, from)
+  const intervals = toIntervals(events, now)
+  const detections = detect(events, config, now)
+
+  // El store es la única fuente de verdad sobre por qué algo se suprimió: se
+  // lo consulta después de `suppress` en vez de reimplementar su lógica acá.
+  const store = createMemoryStore()
+  const passed = new Set(suppress(detections, store, config, now))
+
+  const descriptions = new Map(config.rules.map((r) => [r.id, r.description]))
+
+  const classified: ClassifiedDetection[] = detections.map((detection) => {
+    if (passed.has(detection)) {
+      return {
+        detection,
+        ruleDescription: descriptions.get(detection.ruleId) ?? detection.ruleId,
+        status: "pasa",
+        suppressedBy: null,
+      }
+    }
+    // Si su propio dedupKey ya quedó marcado, otra detección idéntica pasó
+    // antes (dedup). Si no, la frenó la ventana de cooldown de la entidad.
+    const suppressedBy: SuppressionReason = store.lastFiredAt(detection.dedupKey)
+      ? "dedup"
+      : "cooldown"
+    return {
+      detection,
+      ruleDescription: descriptions.get(detection.ruleId) ?? detection.ruleId,
+      status: "suprimida",
+      suppressedBy,
+    }
+  })
+
+  // Orden estable: primero lo grave, y dentro de cada severidad el orden en
+  // que las reglas están declaradas en el config.
+  const ordered = classified
+    .filter((c) => c.status === "pasa")
+    .map((c, index) => ({ c, index }))
+    .sort(
+      (a, b) =>
+        SEVERITY_ORDER[a.c.detection.severity] - SEVERITY_ORDER[b.c.detection.severity] ||
+        a.index - b.index,
+    )
+    .map((x) => x.c)
+
+  const queued = ordered.slice(0, params.maxDecisions).map((c) => c.detection)
+  const queuedSet = new Set(queued)
+  for (const c of classified) {
+    if (c.status === "pasa" && !queuedSet.has(c.detection)) c.status = "fuera-de-cupo"
+  }
+
+  return { config, from, now, events, intervals, classified, queued }
+}
+
+/**
+ * Veredictos pregrabados para `?offline=1`.
+ *
+ * Es el seguro de la demo: sin wifi, con la API caída o con rate limit, el
+ * pipeline llega igual hasta el final. El juicio está grabado; `{entidad}` se
+ * reemplaza por el id concreto para que la tarjeta no mienta sobre a quién se
+ * refiere.
+ *
+ * Llevan deliberación completa a propósito: la escena offline tiene que ser
+ * IDÉNTICA a la del modo en vivo. Una escena degradada no es un seguro.
+ * El orden de `rejected` es el de `config.actions` menos la elegida — el
+ * mismo que produce `normalizeRejected` en el decisor real.
+ */
+export const OFFLINE_VERDICTS: Record<string, Verdict> = {
+  "volt:faulted-stuck": {
+    decision: {
+      actionId: "alert-ops",
+      reason: "Falla persistente en una estación: pierde ingreso y deja conductores varados.",
+      message:
+        "La estación {entidad} lleva más de 10 minutos en Faulted y no se recupera sola. Hay que despachar un técnico.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "create-ticket",
+          reason: "Un ticket entra a una cola; acá hay conductores esperando ahora.",
+        },
+        {
+          actionId: "ignore",
+          reason: "Una falla que ya lleva diez minutos no se destraba sola.",
+        },
+      ],
+      wouldChangeIf:
+        "Si la estación hubiera salido de Faulted antes de los 10 minutos, no alertaba a nadie.",
+    },
+  },
+
+  "volt:offline": {
+    decision: {
+      actionId: "alert-ops",
+      reason: "Sin heartbeat: no sabemos si está cargando, caída o vandalizada.",
+      message: "La estación {entidad} dejó de reportar. Nadie sabe en qué estado quedó.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "create-ticket",
+          reason: "Todavía no sabemos qué arreglar: primero hay que mirar si respondió.",
+        },
+        {
+          actionId: "ignore",
+          reason: "Una estación muda puede estar cobrando sin cargar, o no estar.",
+        },
+      ],
+      wouldChangeIf:
+        "Si hubiera mandado un solo heartbeat en los últimos 5 minutos, esto no existía.",
+    },
+  },
+
+  "volt:long-session": {
+    decision: {
+      actionId: "create-ticket",
+      reason: "Sesión anómala frente a su propio histórico: revisar sin urgencia.",
+      message:
+        "La estación {entidad} lleva una sesión de carga muy por encima de lo normal para ella. Vale una revisión.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "alert-ops",
+          reason: "No hay nadie varado: sacar al equipo de guardia por esto es ruido.",
+        },
+        {
+          actionId: "ignore",
+          reason: "Se repite contra su propio histórico; conviene que quede anotado.",
+        },
+      ],
+      wouldChangeIf:
+        "Si la sesión estuviera dentro del percentil 95 de esta misma estación, no era nada.",
+    },
+  },
+
+  "volt:demand-spike": {
+    decision: {
+      actionId: "ignore",
+      reason: "Un pico de demanda no es una falla: es la red funcionando.",
+      message: "Pico de demanda concentrado en la zona {entidad}. Sin acción.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "alert-ops",
+          reason: "Despertar a la guardia porque la red se está usando sería el peor aviso.",
+        },
+        {
+          actionId: "create-ticket",
+          reason: "No hay nada roto que un técnico pueda ir a arreglar.",
+        },
+      ],
+      wouldChangeIf:
+        "Si en la misma zona hubiera además estaciones entrando en Faulted, esto era una alerta.",
+    },
+  },
+
+  "restaurant:no-show": {
+    decision: {
+      actionId: "avisar-dueno",
+      reason: "En hora pico una reserva sin check-in es plata parada.",
+      message:
+        "La {entidad} sigue reservada y nadie llegó. Si en unos minutos no aparecen, conviene liberarla.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "liberar-reserva",
+          reason: "Liberar sin avisar deja al que llega tarde sin mesa y sin explicación.",
+        },
+        {
+          actionId: "ignore",
+          reason: "En hora pico esa mesa vacía es la que no se factura.",
+        },
+      ],
+      wouldChangeIf: "Si la mesa hubiera pasado a Ocupada antes de los 15 minutos, no avisaba.",
+    },
+  },
+
+  "restaurant:sobremesa": {
+    decision: {
+      actionId: "ignore",
+      reason: "Una sobremesa larga es un cliente contento, no un problema.",
+      message: "La {entidad} lleva rato ocupada. Sin acción.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "avisar-dueno",
+          reason: "Avisarle al dueño de cada sobremesa lo entrena a ignorar el teléfono.",
+        },
+        {
+          actionId: "liberar-reserva",
+          reason: "Hay gente sentada en esa mesa: no hay ninguna reserva que liberar.",
+        },
+      ],
+      wouldChangeIf: "Si además hubiera reservas esperando mesa, valía avisarle al dueño.",
+    },
+  },
+
+  "restaurant:rush": {
+    decision: {
+      actionId: "avisar-dueno",
+      reason: "Varias mesas ocupándose a la vez: el salón se va a saturar.",
+      message: "Se están ocupando varias mesas al mismo tiempo. Conviene reforzar el salón.",
+    },
+    deliberation: {
+      rejected: [
+        {
+          actionId: "liberar-reserva",
+          reason: "El problema es de gente, no de mesas: liberar una no suma un mozo.",
+        },
+        {
+          actionId: "ignore",
+          reason: "Enterarse de la ráfaga cuando ya explotó es enterarse tarde.",
+        },
+      ],
+      wouldChangeIf:
+        "Si las mesas se hubieran ocupado de a una en vez de cuatro en 15 minutos, no avisaba.",
+    },
+  },
+}
+
+/** La acción de descarte del dominio, o la primera declarada si no hay ninguna. */
+function fallbackActionId(config: DomainConfig): string {
+  const ignore = config.actions.find((a) => a.type === "noop")
+  return (ignore ?? config.actions[0])?.id ?? "ignore"
+}
+
+export function offlineDecision(
+  domain: DomainId,
+  detection: Detection,
+  config: DomainConfig,
+): Verdict {
+  const recorded = OFFLINE_VERDICTS[`${domain}:${detection.ruleId}`]
+
+  if (!recorded) {
+    const actionId = fallbackActionId(config)
+    return {
+      decision: {
+        actionId,
+        reason: `No hay decisión pregrabada para la regla "${detection.ruleId}".`,
+        message: `Sin decisión pregrabada para ${config.entity.singular} ${detection.entityId}.`,
+      },
+      // La escena nunca queda coja: la boleta se dibuja igual, con las mismas
+      // filas que tendría en vivo.
+      deliberation: {
+        rejected: config.actions
+          .filter((a) => a.id !== actionId)
+          .map((a) => ({ actionId: a.id, reason: "Sin motivo pregrabado para esta regla." })),
+        wouldChangeIf: "Sin contrafáctico pregrabado para esta regla.",
+      },
+    }
+  }
+
+  return {
+    decision: {
+      ...recorded.decision,
+      message: recorded.decision.message.replaceAll("{entidad}", detection.entityId),
+    },
+    deliberation: recorded.deliberation,
+  }
+}
+
+/**
+ * Ejecución simulada para `?offline=1`: describe lo que habría pasado sin
+ * tocar la red. La UI la marca como simulada — nunca se presenta como real.
+ */
+export function simulatedExecution(action: Action | undefined): ExecutionResult {
+  if (!action) return { ok: false, detail: "acción desconocida" }
+  if (action.type === "noop") return { ok: true, detail: "sin acción (noop)" }
+  return { ok: true, detail: `simulado: ${action.type} → ${action.id}` }
+}
+
+export function findAction(config: DomainConfig, actionId: string): Action | undefined {
+  return config.actions.find((a) => a.id === actionId)
+}
+
+/** "1 h 12 min" / "30 min" / "45 s". Sin locale: mismo texto en cualquier máquina. */
+export function formatDuration(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1000)} s`
+  const minutes = Math.round(ms / 60_000)
+  if (minutes < 60) return `${minutes} min`
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`
+}
+
+/** "19:30" en UTC, leído del ISO. Sin `toLocale*`: el mismo seed se ve igual en toda máquina. */
+export function formatClock(iso: string): string {
+  return iso.slice(11, 16)
+}
+
+const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
+
+/** Nombres en español para las claves de evidencia que producen las reglas. */
+const EVIDENCE_LABELS: Record<string, string> = {
+  state: "estado",
+  durationMs: "duración",
+  thresholdMs: "umbral",
+  startedAt: "desde",
+  baselineMs: "referencia",
+  percentile: "percentil",
+  samples: "muestras",
+  lastSeenAt: "último evento",
+  silentForMs: "en silencio",
+  windowMs: "ventana",
+  count: "ocurrencias",
+  threshold: "umbral",
+  groupBy: "agrupado por",
+}
+
+export function evidenceLabel(key: string): string {
+  return EVIDENCE_LABELS[key] ?? key
+}
+
+/** Convierte un valor de evidencia en texto legible sin depender del locale. */
+export function formatEvidenceValue(key: string, value: unknown): string {
+  if (value === null || value === undefined) return "—"
+  if (typeof value === "number") return key.endsWith("Ms") ? formatDuration(value) : String(value)
+  if (typeof value === "string") {
+    return ISO_DATETIME.test(value) ? `${formatClock(value)} UTC` : value
+  }
+  if (typeof value === "boolean") return value ? "sí" : "no"
+  return JSON.stringify(value)
+}
+
+export function formatEvidence(evidence: Record<string, unknown>): { label: string; value: string }[] {
+  return Object.entries(evidence).map(([key, value]) => ({
+    label: evidenceLabel(key),
+    value: formatEvidenceValue(key, value),
+  }))
+}
+
+/**
+ * El embudo: lo que entró, lo que el motor calló, y lo que llegó a una
+ * persona. Es el argumento anti-bot-de-notificaciones dicho en números —
+ * un bot manda las N; este calló las que ya había avisado.
+ */
+export interface Funnel {
+  events: number
+  intervals: number
+  detections: number
+  /** Calladas por dedup o cooldown: el motor conteniéndose. */
+  silenced: number
+  /** Recortadas por `maxDecisions`. NO es contención: es el tope de la demo. */
+  overCap: number
+  /** Las que llegaron a decidir y ejecutar. */
+  delivered: number
+}
+
+export function buildFunnel(snapshot: RunSnapshot): Funnel {
+  let silenced = 0
+  let overCap = 0
+  let delivered = 0
+  for (const c of snapshot.classified) {
+    if (c.status === "suprimida") silenced++
+    else if (c.status === "fuera-de-cupo") overCap++
+    else delivered++
+  }
+  return {
+    events: snapshot.events.length,
+    intervals: snapshot.intervals.length,
+    detections: snapshot.classified.length,
+    silenced,
+    overCap,
+    delivered,
+  }
+}
+
+export type BallotRowStatus = "elegida" | "descartada" | "sin-resolver"
+
+export interface BallotRow {
+  actionId: string
+  /** discord · github_issue · state_mutation · ntfy · webhook · noop */
+  actionType: string
+  /** La description del config: qué hace esta acción. */
+  description: string
+  status: BallotRowStatus
+  /** El motivo de la elegida, o el porqué del rechazo. `null` sin resolver. */
+  reason: string | null
+  /** Sólo la elegida: el texto que le llega a la persona. */
+  message: string | null
+}
+
+/**
+ * La boleta: SIEMPRE todas las acciones del dominio, SIEMPRE en el orden en
+ * que el config las declara. Que se vean las que no eligió es el punto — sin
+ * las alternativas, el agente es indistinguible de un `switch (ruleId)`.
+ *
+ * `verdict === null` es el caso de error: la boleta se dibuja completa y sin
+ * ganadora, que es más honesto que una tarjeta roja sin contexto.
+ */
+export function buildBallot(config: DomainConfig, verdict: Verdict | null): BallotRow[] {
+  return config.actions.map((action) => {
+    const base = {
+      actionId: action.id,
+      actionType: action.type,
+      description: action.description,
+    }
+
+    if (verdict === null) {
+      return { ...base, status: "sin-resolver" as const, reason: null, message: null }
+    }
+
+    if (action.id === verdict.decision.actionId) {
+      return {
+        ...base,
+        status: "elegida" as const,
+        reason: verdict.decision.reason,
+        message: verdict.decision.message,
+      }
+    }
+
+    const rechazo = verdict.deliberation.rejected.find((r) => r.actionId === action.id)
+    return {
+      ...base,
+      status: "descartada" as const,
+      reason: rechazo?.reason ?? null,
+      message: null,
+    }
+  })
+}
+
+/**
+ * Las paradas del visor de la vista simple.
+ *
+ * Son CUATRO, no cinco: las etapas 4 y 5 comparten escenario (el expediente),
+ * así que como escenas son una sola. Ofrecer un quinto paso daba una flecha
+ * que no cambiaba nada — el humano lo cazó mirando el build de producción.
+ *
+ * Las cinco ETAPAS del pipeline no se tocan: son la tesis del proyecto y las
+ * pestañas de la portada las nombran. Lo que navega escenas es el visor.
+ */
+export const PARADAS = ["eventos", "intervalos", "detecciones", "expediente"] as const
+
+/** La parada donde viven las etapas 4 y 5. */
+export const PARADA_EXPEDIENTE = 3
+
+/** La parada del visor que le corresponde a una etapa del pipeline (0-4). */
+export function paradaDeEtapa(etapa: number): number {
+  if (etapa < 0) return 0
+  return etapa >= PARADA_EXPEDIENTE ? PARADA_EXPEDIENTE : etapa
+}

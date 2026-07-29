@@ -1,0 +1,19 @@
+{
+  "domain": "volt",
+  "displayName": "VOLT — Estaciones de carga",
+  "entity": { "singular": "estación", "plural": "estaciones" },
+  "states": ["Available", "Occupied", "Charging", "Faulted", "Reserved", "Unavailable"],
+  "context": "Red de carga de vehículos eléctricos operada por VOLT en Colombia. El equipo de operaciones responde 24/7 y despacha técnicos a estaciones en falla. Una estación caída es ingreso perdido y un conductor varado.",
+  "rules": [
+    { "id": "faulted-stuck", "type": "duration_in_state", "state": "Faulted", "thresholdMs": 600000, "severity": "high", "description": "Estación atascada en falla" },
+    { "id": "long-session", "type": "duration_vs_baseline", "state": "Charging", "percentile": 95, "minSamples": 5, "severity": "medium", "description": "Sesión de carga mucho más larga que lo normal para esta estación" },
+    { "id": "offline", "type": "absence_of_events", "windowMs": 300000, "severity": "high", "description": "Estación sin heartbeat" },
+    { "id": "demand-spike", "type": "frequency_in_window", "toState": "Charging", "windowMs": 900000, "count": 4, "groupBy": "zone", "severity": "low", "description": "Pico de demanda concentrado en una zona" }
+  ],
+  "actions": [
+    { "id": "alert-ops", "type": "discord", "description": "Alerta al equipo de operaciones en su canal de guardia", "config": { "webhookUrl": "env:DISCORD_OPS_WEBHOOK" } },
+    { "id": "create-ticket", "type": "github_issue", "description": "Crea un ticket de mantenimiento para que un técnico visite la estación", "config": { "repo": "env:GITHUB_REPO", "token": "env:GITHUB_TOKEN" } },
+    { "id": "ignore", "type": "noop", "description": "La situación no amerita ninguna acción" }
+  ],
+  "cooldownMs": 900000
+}

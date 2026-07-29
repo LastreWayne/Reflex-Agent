@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- El punto de luz de la página, a 32 px: papel, núcleo amarillo y aro de
+       oro. Mismo sistema que .lampara en globals.css. -->
+  <rect width="32" height="32" rx="6" fill="#f2efe7"/>
+  <circle cx="16" cy="16" r="8" fill="#f2c200"/>
+  <circle cx="16" cy="16" r="8" fill="none" stroke="#8a6b00" stroke-width="2.5"/>
+</svg>
