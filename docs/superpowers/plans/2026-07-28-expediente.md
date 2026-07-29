@@ -1625,7 +1625,11 @@ export function Expediente({
                   pantalla no viaja. `boleta-marca` es decoración; el estado se
                   dice con palabras.
                 */}
-                <span className="solo-lectores">
+                {/* `.rotulo-seccion` ya existe en globals.css y es una utilidad
+                    visually-hidden de verdad (1px + clip-path). Estaba huérfana:
+                    no la usaba ningún componente. Se reusa en vez de agregar una
+                    clase nueva. El nombre quedó desalineado con este uso. */}
+                <span className="rotulo-seccion">
                   {fila.status === "elegida"
                     ? "Acción elegida:"
                     : fila.status === "descartada"
