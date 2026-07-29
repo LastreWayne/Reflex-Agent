@@ -2723,9 +2723,8 @@ body {
 /*
  * El encabezado va adentro de un panel de vidrio.
  *
- * Misma tensión con DESIGN.md que la regleta, y misma resolución: entra por
- * pedido explícito y va SIN refracción, porque detrás hay papel casi plano y
- * no el campo de líneas.
+ * Vidrio de NIVEL 2 en DESIGN.md § Vidrio líquido, igual que la regleta: SIN
+ * refracción, porque detrás hay papel casi plano y no el campo de líneas.
  *
  * `z-index: 1` NO es decorativo. La mascota del acto está en `position:
  * absolute` arriba a la derecha, y un elemento posicionado se pinta por
@@ -2818,11 +2817,11 @@ body {
  * cadena de `.vidrio`. De ahí el `border: 0` y el `background: none`, que no
  * son un reset perezoso sino la condición para que el vidrio se vea.
  *
- * Nota honesta contra DESIGN.md: la regla dice que el vidrio va SÓLO en el
- * marco del hero y las pestañas, porque son las dos superficies apoyadas
- * sobre el campo de líneas. Ésta no lo está, y entra por pedido explícito.
- * Por eso va SIN refracción: sobre papel casi plano no hay estructura que
- * doblar, y emitir el filtro costaría cuadros por un efecto invisible.
+ * Es vidrio de NIVEL 2 en DESIGN.md § Vidrio líquido: apoyado sobre `.hoja` y
+ * no sobre el campo de líneas, así que va SIN refracción — sobre papel casi
+ * plano no hay estructura que doblar y emitir el filtro costaría cuadros por
+ * un efecto invisible. La lista del nivel 2 es CERRADA: si aparece una
+ * superficie nueva que quiere vidrio, se edita esa lista, no este archivo.
  */
 .regleta {
   display: flex;

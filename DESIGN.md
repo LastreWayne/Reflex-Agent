@@ -84,14 +84,33 @@ de alerta comparten núcleo amarillo y se distinguen por el **grosor del aro**.
 
 ## Vidrio líquido
 
-**El vidrio es estructura, no decoración.** Sólo lo llevan las dos superficies
-que de verdad se apoyan sobre el fondo animado:
+**El vidrio es estructura, no decoración.** La regla tiene **dos niveles**, y
+confundirlos es cómo el efecto se derrama por la página:
 
-1. el **marco del hero**, y
-2. las **cinco pestañas**.
+**Nivel 1 — vidrio que refracta.** Sólo la superficie que se apoya sobre el
+**fondo animado**: el **marco del hero**, y nadie más. La refracción existe
+para doblar el campo de líneas al cruzarlo; sin un fondo con estructura no
+dobla nada y el filtro se paga en cuadros a cambio de nada.
 
-Ningún otro panel de la página lo usa. Nada de blur repartido por paneles que
-no tienen nada detrás.
+**Nivel 2 — vidrio sin refracción (`refraccion: 0`).** Superficies apoyadas
+sobre `.hoja` que **cargan estado**: la página ya usa el filo del vidrio como
+su vocabulario de "esta superficie está encendida", y reusarlo hace que se lean
+como el mismo sistema en vez de como controles sueltos. La lista es **cerrada**:
+
+1. las **cinco pestañas** del dock,
+2. los **chips de la regleta** del expediente, y
+3. el **panel del encabezado del caso**.
+
+**Lo que sigue prohibido:** un panel que sólo muestra contenido no se gana el
+vidrio. Nada de blur repartido por paneles que no tienen nada detrás ni estado
+que comunicar. Sumar una superficie al nivel 2 es **cambiar esta lista**, no
+una decisión local del componente.
+
+> Los tres del nivel 2 son posteriores a la regla original —entraron por pedido
+> explícito en el pase visual del expediente (2026-07-29)— y este documento se
+> actualizó para contemplarlos en vez de dejar que el código y la regla se
+> contradijeran. Hay una nota en `globals.css` (buscar "regleta") que apunta
+> acá.
 
 **Qué es liquid glass acá**, leído de `references/liquidglass1..3.png` y no de
 la palabra:
@@ -214,7 +233,9 @@ Sans, Outfit, Plus Jakarta, Instrument Sans.
 - **Separar con aire, no con líneas.** Hairline sólo donde el espacio no
   alcanza. Cero paneles con relieve, cero remaches, cero textura de grano.
 - **Nada de gradientes en texto.**
-- **El vidrio sólo donde hay algo detrás.**
+- **El vidrio sólo donde hay algo detrás, y la refracción sólo sobre el fondo
+  animado.** La lista de superficies con vidrio es cerrada y vive en *Vidrio
+  líquido*; agregar una es editar esa lista.
 - **El marco no llena la pantalla.** Es más chico que el viewport a propósito:
   el campo de flujo tiene que correr libre alrededor, no asomar por un margen
   de doce píxeles.
@@ -268,6 +289,14 @@ distintos en cada una y el de la refracción tiene que viajar inline.
 | Marco del hero | `0.30` | `5px` | `scale 26` |
 | Pestaña dormida | `0.88` | `13px` | — |
 | Pestaña abierta | `0.95` | `13px` | — |
+| Chip de la regleta | `0.34` | `10px` | — |
+| Panel del encabezado del caso | `0.30` | `10px` | — |
+
+⚠️ **La fila del marco del hero está desactualizada** contra `app/page.tsx:812‑821`,
+que hoy declara tinte `0.16`, blur `4px` y refracción `34`. No se corrigió acá a
+propósito: es drift de otra sección y arreglarlo como efecto secundario de esta
+edición es justo lo que este documento no hace. Va con el resto del drift a un
+pase dedicado.
 
 **Los amarillos y el vidrio, medidos** (`node docs/design/contraste.mjs`):
 
