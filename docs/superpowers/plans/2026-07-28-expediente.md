@@ -2270,3 +2270,125 @@ git commit -m "chore: verificacion final del expediente"
 **Pero el compilador tapa menos de lo que parece.** Verificado en la review de la Task 1: el único archivo que falla es `adapters/decider/claude.ts`. `app/api/decide/route.ts` y `app/pipeline.ts` compilan igual porque nunca anotan el tipo. O sea que entre las Tasks 4 y 5 la ruta devuelve una forma equivocada **sin ningún error**. En las Tasks 5, 6 y 10, verificá la forma con un test, no con `tsc`.
 
 **Deuda que este trabajo NO cierra** (sigue en el ledger anterior): `@types/node` ambient project-wide, el borde `durationMs === thresholdMs`, el segundo bloque `tool_use` descartado en silencio, `actionId` sin validar contra `config.actions`, y el IMPORTANT #1 de la Task 12 (las dos rutas son endpoints públicos sin autenticación — la mitigación sigue siendo no cargar `GITHUB_TOKEN` ni `DISCORD_OPS_WEBHOOK` en el deploy público).
+
+---
+
+### Task 13: El expediente aparece cuando toca, y el visor tiene 4 paradas
+
+**Origen:** revisión visual del humano sobre el build de producción, después de la Task 12. No estaba en el plan.
+
+**Files:**
+- Modify: `app/globals.css` (agregar al final)
+- Modify: `app/pipeline.ts` (agregar al final)
+- Modify: `app/page.tsx`
+- Test: `app/pipeline.test.ts`
+
+**Interfaces:**
+- Consumes: `ETAPAS` (5 entradas) en `page.tsx`, `Expediente` de la Task 9.
+- Produces: `PARADAS`, `PARADA_EXPEDIENTE`, `paradaDeEtapa()` en `app/pipeline.ts`.
+
+**Los dos defectos**
+
+1. **El expediente se ve durante las etapas 1, 2 y 3.** `page.tsx` emite `<div className="escenario" data-visible={etapa >= 3 ? "si" : "no"}>` y `globals.css` **no tiene ninguna regla** para `.escenario`. El atributo está y nada actúa sobre él. Es un hueco del dispatch de la Task 11: se enumeraron los atributos que emite `expediente.tsx` y se omitieron los que emite `page.tsx`.
+
+2. **El visor deja ir de la etapa 4 a la 5 y no pasa nada visible.** Las etapas 4 y 5 comparten escenario a propósito, así que como *escenas* son una sola. El visor cuenta hasta `ETAPAS.length` (5) y ofrece un paso que no cambia el decorado.
+
+**La decisión de diseño:** las cinco etapas del pipeline **se quedan** — son la tesis del proyecto y las cinco pestañas de la portada las nombran. Lo que baja a cuatro es el **visor**, que navega escenas, no etapas. Las pestañas 4 y 5 de la portada llevan las dos a la misma parada.
+
+- [ ] **Step 1: Escribir los tests que fallan**
+
+En `app/pipeline.test.ts`:
+
+```ts
+import { PARADAS, PARADA_EXPEDIENTE, paradaDeEtapa } from "./pipeline.js"
+
+describe("las paradas del visor", () => {
+  it("son cuatro: las etapas 4 y 5 comparten escenario", () => {
+    expect(PARADAS).toHaveLength(4)
+    expect(PARADA_EXPEDIENTE).toBe(3)
+  })
+
+  it("las tres primeras etapas mapean a su propia parada", () => {
+    expect(paradaDeEtapa(0)).toBe(0)
+    expect(paradaDeEtapa(1)).toBe(1)
+    expect(paradaDeEtapa(2)).toBe(2)
+  })
+
+  it("las etapas 4 y 5 caen las dos en el expediente", () => {
+    expect(paradaDeEtapa(3)).toBe(PARADA_EXPEDIENTE)
+    expect(paradaDeEtapa(4)).toBe(PARADA_EXPEDIENTE)
+  })
+
+  it("no se sale del rango por arriba ni por abajo", () => {
+    expect(paradaDeEtapa(-1)).toBe(0)
+    expect(paradaDeEtapa(99)).toBe(PARADA_EXPEDIENTE)
+  })
+})
+```
+
+- [ ] **Step 2: Correr y ver fallar**
+
+Run: `npx vitest run app/pipeline.test.ts`
+Expected: FAIL — `PARADAS` no existe.
+
+- [ ] **Step 3: Implementar en `app/pipeline.ts`**
+
+```ts
+/**
+ * Las paradas del visor de la vista simple.
+ *
+ * Son CUATRO, no cinco: las etapas 4 y 5 comparten escenario (el expediente),
+ * así que como escenas son una sola. Ofrecer un quinto paso daba una flecha
+ * que no cambiaba nada — el humano lo cazó mirando el build de producción.
+ *
+ * Las cinco ETAPAS del pipeline no se tocan: son la tesis del proyecto y las
+ * pestañas de la portada las nombran. Lo que navega escenas es el visor.
+ */
+export const PARADAS = ["eventos", "intervalos", "detecciones", "expediente"] as const
+
+/** La parada donde viven las etapas 4 y 5. */
+export const PARADA_EXPEDIENTE = 3
+
+/** La parada del visor que le corresponde a una etapa del pipeline (0-4). */
+export function paradaDeEtapa(etapa: number): number {
+  if (etapa < 0) return 0
+  return etapa >= PARADA_EXPEDIENTE ? PARADA_EXPEDIENTE : etapa
+}
+```
+
+- [ ] **Step 4: El CSS que faltaba**
+
+Agregar al final de `app/globals.css`:
+
+```css
+/*
+ * EL ESCENARIO DEL EXPEDIENTE.
+ *
+ * `page.tsx` venía marcando `data-visible` desde la Task 10 y no había regla
+ * que lo leyera, así que el expediente se veía también durante los carriles
+ * 1-3. El atributo existía; el estilo no. Se cierra acá.
+ */
+.escenario[data-visible="no"] {
+  display: none;
+}
+```
+
+- [ ] **Step 5: Cablear el visor en `app/page.tsx`**
+
+- El visor navega paradas, no etapas: `irAEtapa` acota contra `PARADAS.length - 1`, el botón siguiente se deshabilita en `PARADA_EXPEDIENTE`, y `visor-cuenta` muestra `PARADAS.length`.
+- El rótulo de la parada 3 es **"Decisión y acción"** — nombra las dos etapas que comparten escenario.
+- El efecto que persigue al pipeline usa `paradaDeEtapa(carriles - 1)`.
+- Las pestañas de la portada siguen siendo cinco; `verEtapa(i)` llama a `irAEtapa(paradaDeEtapa(i), true)`.
+- El `data-visible` del escenario pasa a `etapa === PARADA_EXPEDIENTE ? "si" : "no"`.
+- **El número del pecho de la mascota sigue saliendo del pipeline, no del visor**: en el expediente muestra `04` mientras la consecuencia está pendiente y `05` cuando aterriza. Es lo que dice "esto avanzó" sin mover el decorado.
+
+- [ ] **Step 6: Verificar**
+
+`npx vitest run` (verde), `npx tsc --noEmit` (limpio), `npm run build` (pasa). Y en el navegador con `?offline=1`: el expediente **no** aparece durante los carriles 1-3, el visor dice "1 de 4" … "4 de 4", y la flecha derecha se apaga en la parada 4.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add app/globals.css app/pipeline.ts app/pipeline.test.ts app/page.tsx
+git commit -m "fix(app): el expediente aparece cuando toca, y el visor tiene 4 paradas"
+```
