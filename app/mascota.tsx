@@ -33,19 +33,24 @@ const LUZ_EN_REPOSO = { x: -0.32, y: -0.5 }
 interface MascotaProps {
   fase: FaseMascota
   /**
-   * Etapa que está mirando el visor, 1–5. Se lee en el pecho del robot.
+   * Lo que se lee en el pecho del robot, ya formateado: `"03"`, o `"4/5"` en
+   * el expediente, donde las etapas 4 y 5 comparten una sola parada.
+   *
+   * Es un string y no un número porque quien sabe que dos etapas comparten
+   * escenario es `page.tsx`, no la mascota. Acá formatear sería adivinar esa
+   * regla desde el otro lado.
    *
    * `null` cuando NO hay una etapa en foco — la vista de los cinco carriles,
    * donde se ven todos a la vez. Es `null` y no un booleano `mostrarNumero`
    * porque eso es lo que pasa de verdad: no es que el número esté escondido,
    * es que ahí no existe una etapa que mostrar.
    */
-  etapa: number | null
+  pecho: string | null
   /** Una línea sobre lo que está haciendo, para la placa del pie. */
   detalle: string
 }
 
-export function Mascota({ fase, etapa, detalle }: MascotaProps) {
+export function Mascota({ fase, pecho, detalle }: MascotaProps) {
   const ref = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -105,7 +110,7 @@ export function Mascota({ fase, etapa, detalle }: MascotaProps) {
     }
   }, [])
 
-  const numero = etapa === null ? null : `0${etapa}`.slice(-2)
+  const numero = pecho
 
   return (
     <figure className="mascota" data-mascota={fase} ref={ref}>
@@ -119,7 +124,7 @@ export function Mascota({ fase, etapa, detalle }: MascotaProps) {
         <desc id="mascota-desc">
           Un centinela recortado en papel y tinta. Un visor ancho barre de lado a lado siguiendo la
           luz del cursor
-          {numero !== null && "; en el pecho lleva el número de la etapa que estás mirando"}, y
+          {numero !== null && `; en el pecho lleva ${numero}, la etapa que estás mirando`}, y
           arriba el punto de luz que dice en qué anda.
         </desc>
 

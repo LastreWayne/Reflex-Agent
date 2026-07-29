@@ -240,11 +240,24 @@ body {
  * un subrayado completo — una regla que cruza todo el ancho competiría con las
  * pestañas que tiene justo debajo.
  */
+/*
+ * El aire es ASIMÉTRICO a propósito: mucho arriba, poco abajo.
+ *
+ * El rótulo venía con 0 arriba y --e3 abajo, así que flotaba a media distancia
+ * entre la bajada de la portada y las pestañas, sin pertenecerle a ninguna de
+ * las dos. Con el aire volcado hacia arriba la proximidad dice de quién es el
+ * título: se despega del bloque anterior y se pega a las pestañas que
+ * introduce.
+ *
+ * Va en `padding-top` y no en `margin-top` para que no colapse contra lo que
+ * tenga arriba — el rótulo es hermano de `.hero-centro`, no hijo.
+ */
 .rotulo-caminos {
   display: flex;
   align-items: baseline;
   gap: var(--e3);
-  margin: 0 0 var(--e3);
+  padding-top: var(--e7);
+  margin: 0 0 var(--e2);
   font-family: var(--serif);
   font-size: clamp(0.95rem, 1.5vw, 1.2rem);
   font-weight: 400;
@@ -1826,12 +1839,25 @@ body {
    esta paleta tiene un solo acento y ese es el punto. */
 
 .tarjeta[data-card="decision"],
-.tarjeta[data-card="accion"] {
+.tarjeta[data-card="accion"],
+/* La fila ganadora del expediente es la misma decisión que la tarjeta del
+   carril 4, contada en grande. Le corresponde el mismo borde vivo: el efecto
+   de page.tsx la recorre sola, porque busca `[data-borde-vivo]` en todo el
+   documento y no dentro de un contenedor. */
+.boleta-fila[data-elegida="si"] {
   --halo: 220px;
 }
 
+/* El gradiente se posiciona en coordenadas locales, así que el elemento tiene
+   que ser el bloque contenedor de su propio ::after. `.tarjeta` ya trae
+   `position: relative` en su base; la fila de la boleta no. */
+.boleta-fila[data-elegida="si"] {
+  position: relative;
+}
+
 .tarjeta[data-card="decision"]::after,
-.tarjeta[data-card="accion"]::after {
+.tarjeta[data-card="accion"]::after,
+.boleta-fila[data-elegida="si"]::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -2069,6 +2095,64 @@ body {
   width: min(100%, 220px);
   height: auto;
   overflow: visible;
+}
+
+/*
+ * ACTO II — el bot se asoma por el borde derecho.
+ *
+ * En el recorrido (carriles 1-3) la mascota cuelga abajo del carril y ahí
+ * funciona: es lo único que hay debajo. En el expediente NO, porque abajo
+ * viven el embudo, el caso, la boleta y la consecuencia — el bot terminaba
+ * empujado fuera del frame y no se veía nunca.
+ *
+ * `data-acto` ya lo escribía page.tsx desde la Task 10 y no tenía una sola
+ * regla que lo leyera. Es el mismo hueco que dejó `.escenario[data-visible]`,
+ * así que acá se cierra en vez de inventar un atributo nuevo.
+ *
+ * Sale del flujo para no robarle ancho al expediente, y se ancla arriba a la
+ * derecha, que es la zona que quedó libre: el título y el embudo van a la
+ * izquierda y la regleta al centro.
+ *
+ * ENTERO, no recortado: se apoya contra el borde derecho pero no lo cruza.
+ * Un bot cortado por la mitad se lee como un defecto de layout —igual que se
+ * leía cuando quedaba fuera del frame— y no como una decisión.
+ */
+.carriles[data-view="simple"][data-acto="expediente"] {
+  position: relative;
+}
+
+.carriles[data-view="simple"][data-acto="expediente"] .mascota {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 11rem;
+  padding: 0;
+  gap: 0;
+  /* Es decorado, no un control: no puede comerse un clic de la boleta. */
+  pointer-events: none;
+}
+
+/* El pie (nombre y detalle) se va en este acto: lo que dice ya lo narra el
+   expediente entero, y acá el bot es presencia, no una ficha con rótulo. */
+.carriles[data-view="simple"][data-acto="expediente"] .mascota-pie {
+  display: none;
+}
+
+/*
+ * Angosto: no hay margen derecho del que asomarse sin taparle texto a la
+ * boleta, así que vuelve al flujo y se apoya debajo, como en el recorrido.
+ */
+@media (max-width: 60rem) {
+  .carriles[data-view="simple"][data-acto="expediente"] .mascota {
+    position: static;
+    width: min(100%, 30rem);
+    padding: var(--e6) 0 0;
+    gap: var(--e4);
+  }
+
+  .carriles[data-view="simple"][data-acto="expediente"] .mascota-pie {
+    display: flex;
+  }
 }
 
 /* Silueta de tinta sobre papel. */
@@ -2626,30 +2710,165 @@ body {
   font-size: 0.875em;
 }
 
+/* ── EL ENCABEZADO DEL CASO ────────────────────────────────────────────────
+   Venía SIN una sola regla propia: se renderizaba con los defaults del
+   navegador —márgenes de <p> y <dl>, y el margin-inline-start de 40px que el
+   agente de usuario le pone a cada <dd>—. Eso lo dejaba en 246px de alto y
+   con los valores sangrados, cuando el contenido es una identidad, una regla
+   y tres medidas.
+
+   Ahora es UN renglón: identidad y medidas comparten línea, y la regla baja
+   al pie. Los datos suben y la descripción acompaña. */
+
+/*
+ * El encabezado va adentro de un panel de vidrio.
+ *
+ * Misma tensión con DESIGN.md que la regleta, y misma resolución: entra por
+ * pedido explícito y va SIN refracción, porque detrás hay papel casi plano y
+ * no el campo de líneas.
+ *
+ * `z-index: 1` NO es decorativo. La mascota del acto está en `position:
+ * absolute` arriba a la derecha, y un elemento posicionado se pinta por
+ * encima de uno que no lo está — o sea que el bot se dibujaría sobre los
+ * datos del caso. Acá el orden se fija a mano en vez de quedar librado a esa
+ * regla: el contenido gana, el decorado queda atrás.
+ */
+.caso-vidrio {
+  position: relative;
+  z-index: 1;
+  padding: var(--e3) var(--e4);
+}
+
+.caso-vidrio .caso-cabeza {
+  width: 100%;
+}
+
+.caso-cabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--e2) var(--e3);
+}
+
+.caso-cabeza .caso-identidad,
+.caso-cabeza .caso-regla,
+.caso-cabeza .caso-evidencia {
+  margin: 0;
+}
+
+.caso-identidad,
+.caso-evidencia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.caso-identidad {
+  gap: var(--e2);
+}
+
+.caso-evidencia {
+  gap: var(--e2) var(--e3);
+}
+
+.caso-dato {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e1);
+}
+
+/* El peso separa la etiqueta del valor, y nada más: la etiqueta NO va en
+   tinta apagada ni a menor tamaño, porque las dos cosas cancelan la negrilla
+   en vez de acompañarla. */
+.caso-dato dt {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Cifras de ancho fijo: ahora que las medidas están en fila se comparan entre
+   sí, y sin esto bailan al cambiar de caso. Mismo trato que `.embudo`. */
+.caso-dato dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* El mismo separador que usa el embudo más arriba. Decorativo: va en ::after
+   para que no lo lea un lector de pantalla ni se copie con el texto. */
+.caso-dato:not(:last-child)::after {
+  content: "·";
+  margin-left: var(--e2);
+  color: var(--linea-fuerte);
+}
+
+.caso-regla {
+  flex-basis: 100%;
+  color: var(--tinta-media);
+  font-size: 0.9375em;
+}
+
 .caso-entidad {
   color: var(--tinta-media);
 }
 
+/*
+ * LA REGLETA: tres píldoras de vidrio, centradas.
+ *
+ * Cada botón ES la superficie —el marcado lo arma `useVidrio` en
+ * expediente.tsx— así que esta hoja no pinta fondo ni borde: los pone la
+ * cadena de `.vidrio`. De ahí el `border: 0` y el `background: none`, que no
+ * son un reset perezoso sino la condición para que el vidrio se vea.
+ *
+ * Nota honesta contra DESIGN.md: la regla dice que el vidrio va SÓLO en el
+ * marco del hero y las pestañas, porque son las dos superficies apoyadas
+ * sobre el campo de líneas. Ésta no lo está, y entra por pedido explícito.
+ * Por eso va SIN refracción: sobre papel casi plano no hay estructura que
+ * doblar, y emitir el filtro costaría cuadros por un efecto invisible.
+ */
 .regleta {
   display: flex;
-  gap: 0.375rem;
+  justify-content: center;
+  gap: var(--e2);
 }
 
 .regleta-chip {
-  border: 1px solid var(--linea-fuerte);
-  border-radius: var(--radio-pildora);
-  background: transparent;
+  /* 44px: el piso de un blanco que se toca con el dedo. */
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 var(--e3);
+  border: 0;
+  background: none;
   color: var(--tinta-media);
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
-  min-width: 2rem;
-  padding: 0.125rem 0.5rem;
   cursor: pointer;
+
+  /*
+   * `.vidrio` ya declaró `display: flex; flex-direction: column`, así que el
+   * botón NO centra su contenido como lo haría un <button> normal: el número
+   * es un ítem de columna y queda arriba. Estas dos líneas lo centran en los
+   * dos ejes —`justify-content` es el vertical acá, por la dirección column—.
+   * `line-height: 1` saca el descuelgue de la caja de línea, que sobre una
+   * píldora chica corre el dígito un par de píxeles hacia abajo.
+   */
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
+/*
+ * El caso en pantalla enciende su filo, exactamente como la pestaña que el
+ * visor está mirando (`--vidrio-marca`, más arriba en esta hoja). Es el
+ * vocabulario que la página ya tiene para "esta superficie de vidrio está
+ * encendida", y reusarlo hace que las dos se lean como el mismo sistema.
+ *
+ * El filo NO viaja solo: el amarillo sobre claro da 1.46:1 y no alcanza para
+ * comunicar un estado por sí mismo. El peso y la tinta plena son el segundo
+ * canal, y son los que sostienen la distinción sin depender del color.
+ */
 .regleta-chip[aria-pressed="true"] {
-  border-color: var(--punto-aro);
-  background: var(--amarillo-palido);
+  --vidrio-marca: inset 0 0 0 1.5px var(--amarillo);
   color: var(--tinta);
+  font-weight: 500;
 }
 
 /* ── LA BOLETA ─────────────────────────────────────────────────────────── */
@@ -2700,6 +2919,40 @@ body {
 
 .boleta-motivo {
   max-width: var(--medida);
+}
+
+/*
+ * El rótulo de cada texto de la boleta.
+ *
+ * Mismo registro que los `dt` de las tarjetas (0.75rem, --tinta-tenue,
+ * minúscula): es la voz que la página ya tiene para "esto es el nombre de un
+ * campo". Deliberadamente NO es un eyebrow en mayúsculas con tracking — eso
+ * sería inventar una gramática nueva para decir lo mismo, y además la
+ * repetiría tres veces por fila.
+ *
+ * En renglón propio y no en línea: los textos que rotula son de largo muy
+ * distinto —una descripción de config es corta, un motivo del modelo son dos
+ * o tres renglones— y un rótulo en línea deja la primera línea desalineada
+ * contra las otras.
+ */
+.boleta-rotulo {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.75rem;
+  color: var(--tinta-tenue);
+}
+
+/* El rótulo del mensaje es hermano del blockquote, no va adentro: la cita
+   tiene que contener SÓLO lo que el agente escribió. Le toca el mismo aire
+   que la cita ya se daba a sí misma. */
+.boleta-rotulo + .boleta-mensaje {
+  margin-top: 2px;
+}
+
+.boleta-descripcion + .boleta-rotulo,
+.boleta-motivo + .boleta-rotulo,
+.boleta-descripcion ~ .boleta-rotulo {
+  margin-top: 0.5rem;
 }
 
 /* El contrafáctico es la línea que convierte una opinión en un criterio: se

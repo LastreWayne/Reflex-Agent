@@ -540,19 +540,25 @@ export default function Page() {
         : `Recorriendo el pipeline: etapa ${carriles === 0 ? 1 : carriles} de ${ETAPAS.length}.`
 
   /*
-   * El número del pecho SIGUE SALIENDO DEL PIPELINE, no de la parada del
-   * visor. Para las paradas 0-2 ambos coinciden (hay una etapa por parada).
-   * En la parada del expediente la parada sola no alcanza — ahí viven las
-   * etapas 4 Y 5 — así que se desempata con la consecuencia del caso en
-   * escena: "04" mientras está pendiente, "05" cuando aterriza. Así el pecho
-   * dice "esto avanzó" aunque el decorado no se mueva.
+   * Qué dice el pecho del robot.
+   *
+   * En las paradas 0-2 hay UNA etapa por parada, así que el número es la
+   * posición y se escribe con cero adelante: "01", "02", "03".
+   *
+   * En la parada del expediente conviven las etapas 4 Y 5 —comparten
+   * escenario— y el pecho lo dice literalmente: "4/5". Antes se desempataba
+   * con la consecuencia ("04" pendiente, "05" aterrizada) para que el pecho
+   * marcara avance aunque el decorado no se moviera; se cambió por pedido
+   * explícito. Lo que se pierde es esa señal de progreso; lo que se gana es
+   * que el pecho deja de afirmar que hay una sola etapa en pantalla cuando
+   * hay dos, que es lo mismo que ya rompía el `aria-current` duplicado de las
+   * pestañas.
+   *
+   * El formateo vive ACÁ y no en la mascota: quien sabe que dos etapas
+   * comparten parada es esta página.
    */
-  const etapaMascota =
-    etapa === PARADA_EXPEDIENTE
-      ? accionEnEscena && accionEnEscena.status !== "pendiente"
-        ? 5
-        : 4
-      : etapa + 1
+  const pechoMascota =
+    etapa === PARADA_EXPEDIENTE ? "4/5" : `0${etapa + 1}`.slice(-2)
 
   const totales = [
     snapshot && carriles >= 1 ? snapshot.events.length : 0,
@@ -1151,7 +1157,7 @@ export default function Page() {
               componente, y su useEffect de seguimiento del cursor arranca de nuevo en
               LUZ_EN_REPOSO: la luz pega un salto visible. No hay test que lo cache.
             */}
-            <Mascota fase={fase} etapa={vista === "full" ? null : etapaMascota} detalle={detalleMascota} />
+            <Mascota fase={fase} pecho={vista === "full" ? null : pechoMascota} detalle={detalleMascota} />
           </div>
         </section>
 

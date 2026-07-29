@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react"
 import type { BallotRow, Funnel } from "./pipeline.js"
+import { useVidrio } from "./vidrio-liquido.js"
 
 /*
  * El expediente: el clímax de la página y lo único que no se parece a un log.
@@ -57,6 +58,29 @@ export function Expediente({
   casos,
   children,
 }: ExpedienteProps) {
+  /*
+   * Las dos superficies de vidrio del expediente: los chips de la regleta y el
+   * panel del encabezado del caso.
+   *
+   * `refraccion: 0` en las dos, a propósito. Se apoyan en `.hoja`, no sobre el
+   * campo de líneas: no hay fondo con estructura que doblar, y emitir el
+   * filtro costaría cuadros por un efecto que nadie puede ver. Las pestañas
+   * —el otro vidrio interactivo de la página— tampoco refractan; sólo el
+   * marco del hero lo hace.
+   */
+  const chip = useVidrio({
+    clase: "regleta-chip",
+    tinte: 0.34,
+    radio: "var(--radio-pildora)",
+    desenfoque: "10px",
+  })
+  const panel = useVidrio({
+    clase: "caso-vidrio",
+    tinte: 0.3,
+    radio: "var(--radio-tarjeta)",
+    desenfoque: "10px",
+  })
+
   return (
     <section className="expediente" data-caso={caso ? "si" : "no"} aria-labelledby="expediente-titulo">
       <header className="expediente-cabeza">
@@ -93,7 +117,7 @@ export function Expediente({
             </>
           )}
           <strong>
-            <span className="cifra">{funnel.delivered}</span> llegaron a vos
+            <span className="cifra">{funnel.delivered}</span> llegaron a ti
           </strong>
           {/* El cupo NO se suma a los callados: no es el motor conteniéndose,
               es el tope de la demo. Renglón propio y sólo si hay alguno. */}
@@ -106,16 +130,21 @@ export function Expediente({
 
         {casos.length > 1 && (
           <div className="regleta" role="group" aria-label="Casos de esta corrida">
+            {/* Cada botón ES una superficie de vidrio. Por eso `useVidrio` es
+                un hook y no un componente envolvente: con un wrapper habría
+                que elegir entre el vidrio y el botón, y el estado —hover,
+                foco, aria-pressed— vive en el botón. */}
             {casos.map((c, i) => (
               <button
                 key={c.key}
                 type="button"
-                className="regleta-chip"
+                {...chip.vidrio}
                 data-action={`caso-${i + 1}`}
                 aria-label={`Caso ${i + 1}`}
                 aria-pressed={c.activo}
                 onClick={c.onIr}
               >
+                {chip.capas}
                 {i + 1}
               </button>
             ))}
@@ -131,27 +160,32 @@ export function Expediente({
         </p>
       ) : (
         <>
-          <div className="caso-cabeza">
-            <p className="caso-identidad">
-              {/* El sustantivo del dominio va adelante del id: cambiar de
-                  dominio y ver "mesa 7" donde decía "estación EVC-03" es la
-                  tesis del proyecto ocurriendo a la vista. */}
-              <span className="caso-entidad">{caso.entityLabel}</span>{" "}
-              <span className="titulo">{caso.entityId}</span>{" "}
-              <span className="etiqueta" data-rule={caso.ruleId}>
-                {caso.ruleId}
-              </span>{" "}
-              <span className="etiqueta">severidad {caso.severidad}</span>
-            </p>
-            <p className="caso-regla">{caso.ruleDescription}</p>
-            <dl className="caso-evidencia">
-              {caso.evidencia.map((row) => (
-                <div key={row.label} className="caso-dato">
-                  <dt>{row.label}</dt>
-                  <dd>{row.value}</dd>
-                </div>
-              ))}
-            </dl>
+          <div {...panel.vidrio}>
+            {panel.capas}
+            <div className="caso-cabeza">
+              <p className="caso-identidad">
+                {/* El sustantivo del dominio va adelante del id: cambiar de
+                    dominio y ver "mesa 7" donde decía "estación EVC-03" es la
+                    tesis del proyecto ocurriendo a la vista. */}
+                <span className="caso-entidad">{caso.entityLabel}</span>{" "}
+                <span className="titulo">{caso.entityId}</span>{" "}
+                <span className="etiqueta" data-rule={caso.ruleId}>
+                  {caso.ruleId}
+                </span>{" "}
+                <span className="etiqueta">severidad {caso.severidad}</span>
+              </p>
+              <dl className="caso-evidencia">
+                {caso.evidencia.map((row) => (
+                  <div key={row.label} className="caso-dato">
+                    <dt>{row.label}</dt>
+                    <dd>{row.value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {/* La regla baja al pie del renglón: la identidad y las medidas
+                  mandan, la descripción acompaña. */}
+              <p className="caso-regla">{caso.ruleDescription}</p>
+            </div>
           </div>
 
           {error !== null && (
@@ -172,6 +206,11 @@ export function Expediente({
                 data-descartada={fila.status === "descartada" ? "si" : "no"}
                 data-estado={fila.status}
                 data-tipo={fila.actionType}
+                /* Sólo la ganadora lleva borde vivo. El efecto de page.tsx
+                   recorre `[data-borde-vivo]` en todo el documento y le
+                   escribe a cada uno la posición del cursor relativa a sí
+                   mismo, así que basta el atributo: no hay props que pasar. */
+                data-borde-vivo={fila.status === "elegida" ? "" : undefined}
                 style={{ "--i": i } as CSSProperties}
               >
                 {/*
@@ -198,10 +237,32 @@ export function Expediente({
                     {fila.actionType}
                   </span>
                 </p>
-                <p className="boleta-descripcion">{fila.description}</p>
-                {fila.reason !== null && <p className="boleta-motivo">{fila.reason}</p>}
+                {/*
+                  Los tres textos son de NATURALEZA distinta y sin rótulo se
+                  leen como tres párrafos iguales: uno sale del config, otro
+                  del juicio del modelo, y el tercero es lo único que una
+                  persona va a ver de verdad. El caso más filoso es `reason`,
+                  que es UN solo campo con dos significados opuestos según la
+                  fila: por qué la eligió, o por qué la descartó. El rótulo es
+                  lo que lo desambigua.
+                */}
+                <p className="boleta-descripcion">
+                  <span className="boleta-rotulo">qué hace</span>
+                  {fila.description}
+                </p>
+                {fila.reason !== null && (
+                  <p className="boleta-motivo">
+                    <span className="boleta-rotulo">
+                      {fila.status === "elegida" ? "por qué la eligió" : "por qué no"}
+                    </span>
+                    {fila.reason}
+                  </p>
+                )}
                 {fila.message !== null && (
-                  <blockquote className="boleta-mensaje">{fila.message}</blockquote>
+                  <>
+                    <span className="boleta-rotulo">lo que va a leer una persona</span>
+                    <blockquote className="boleta-mensaje">{fila.message}</blockquote>
+                  </>
                 )}
               </li>
             ))}
