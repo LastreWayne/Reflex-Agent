@@ -1556,6 +1556,7 @@ export function Expediente({
                 type="button"
                 className="regleta-chip"
                 data-action={`caso-${i + 1}`}
+                aria-label={`Caso ${i + 1}`}
                 aria-pressed={c.activo}
                 onClick={c.onIr}
               >
@@ -1610,12 +1611,27 @@ export function Expediente({
               <li
                 key={fila.actionId}
                 className="boleta-fila"
+                aria-current={fila.status === "elegida" ? "true" : undefined}
                 data-elegida={fila.status === "elegida" ? "si" : "no"}
                 data-descartada={fila.status === "descartada" ? "si" : "no"}
                 data-estado={fila.status}
                 data-tipo={fila.actionType}
                 style={{ "--i": i } as CSSProperties}
               >
+                {/*
+                  La boleta entera significa cuál ganó y cuáles no. Sin esto,
+                  eso viaja únicamente en el color y en un glifo que el CSS
+                  pinta sobre un span aria-hidden — o sea que para un lector de
+                  pantalla no viaja. `boleta-marca` es decoración; el estado se
+                  dice con palabras.
+                */}
+                <span className="solo-lectores">
+                  {fila.status === "elegida"
+                    ? "Acción elegida:"
+                    : fila.status === "descartada"
+                      ? "Acción descartada:"
+                      : "Sin resolver:"}
+                </span>
                 <p className="boleta-cabeza">
                   <span className="boleta-marca" aria-hidden="true" />
                   <span className="titulo">{fila.actionId}</span>{" "}
