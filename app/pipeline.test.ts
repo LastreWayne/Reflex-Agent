@@ -376,9 +376,16 @@ describe("buildFunnel", () => {
     expect(f.overCap).toBe(snap.classified.filter((c) => c.status === "fuera-de-cupo").length)
   })
 
+  /*
+   * Va sobre `restaurant` a propósito: `volt` no produce ni una supresión en
+   * ningún seed (medido), así que sobre volt esta aserción sería 0 === 0 y no
+   * podría cazar que la rama "suprimida" se caiga entera. La cota inferior está
+   * para que el test no se degrade en silencio si el fixture cambia.
+   */
   it("cuenta las silenciadas contra el estado real, no contra el total", () => {
-    const snap = buildRun({ ...DEFAULT_PARAMS, forceIncident: true })
+    const snap = buildRun({ ...DEFAULT_PARAMS, domain: "restaurant" })
     const f = buildFunnel(snap)
+    expect(f.silenced).toBeGreaterThan(0)
     expect(f.silenced).toBe(snap.classified.filter((c) => c.status === "suprimida").length)
     expect(f.delivered).toBe(snap.classified.filter((c) => c.status === "pasa").length)
   })
