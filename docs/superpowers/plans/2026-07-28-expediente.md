@@ -1515,10 +1515,27 @@ export function Expediente({
           intervalos <span className="punto">·</span>{" "}
           <span className="cifra">{funnel.detections}</span> patrones{" "}
           <span className="punto">·</span>{" "}
-          <span className="embudo-callado">
-            <span className="cifra">{funnel.silenced}</span> callados por repetidos
-          </span>{" "}
-          <span className="punto">·</span>{" "}
+          {/*
+            El renglón de callados aparece SÓLO si hubo alguno, y no siempre los
+            hay: medido, `volt` no suprime en ningún seed ni con 16 estaciones.
+            No es un defecto — `cooldownKey` es `${ruleId}:${entityId}` y la demo
+            evalúa UN solo instante, así que un par (regla, entidad) no puede
+            colisionar consigo mismo. La supresión existe para callar la alerta
+            repetida ENTRE ticks. `restaurant` sí suprime (3 a 8) porque su regla
+            `rush` no lleva groupBy y choca dentro del mismo lote.
+
+            Mostrar "0 callados" sería peor que no mostrarlo: invita a leer que
+            el motor no filtra nada. Sin el renglón, el embudo igual narra el
+            angostamiento de eventos a lo que llegó a una persona.
+          */}
+          {funnel.silenced > 0 && (
+            <>
+              <span className="embudo-callado">
+                <span className="cifra">{funnel.silenced}</span> callados por repetidos
+              </span>{" "}
+              <span className="punto">·</span>{" "}
+            </>
+          )}
           <strong>
             <span className="cifra">{funnel.delivered}</span> llegaron a vos
           </strong>
