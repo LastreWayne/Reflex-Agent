@@ -2595,3 +2595,173 @@ body {
     margin-top: var(--e7);
   }
 }
+
+/* ── EL EXPEDIENTE ─────────────────────────────────────────────────────────
+   El clímax. La única parte de la página que no se parece a un log: por eso
+   no reusa .carril ni .tarjeta. */
+
+.expediente {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;              /* la cadena de altura no se afloja acá:
+                                 ver docs/design/medir.mjs y la lección del
+                                 layout de los cinco carriles */
+  overflow-y: auto;
+}
+
+.embudo {
+  font-variant-numeric: tabular-nums;
+}
+
+.embudo-callado {
+  color: var(--tinta-tenue);
+}
+
+/* El cupo va en renglón propio: no es contención del motor, es el tope de la
+   demo, y sumarlo a los callados sería mentir con un número. */
+.embudo-cupo {
+  display: block;
+  color: var(--tinta-tenue);
+  font-size: 0.875em;
+}
+
+.caso-entidad {
+  color: var(--tinta-media);
+}
+
+.regleta {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.regleta-chip {
+  border: 1px solid var(--linea-fuerte);
+  border-radius: var(--radio-pildora);
+  background: transparent;
+  color: var(--tinta-media);
+  font-variant-numeric: tabular-nums;
+  min-width: 2rem;
+  padding: 0.125rem 0.5rem;
+  cursor: pointer;
+}
+
+.regleta-chip[aria-pressed="true"] {
+  border-color: var(--punto-aro);
+  background: var(--amarillo-palido);
+  color: var(--tinta);
+}
+
+/* ── LA BOLETA ─────────────────────────────────────────────────────────── */
+
+.boleta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+}
+
+.boleta-fila {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio-tarjeta);
+  background: var(--papel-alto);
+}
+
+/* La ganadora lleva la luz; el resto no. El aro (--punto-aro) es el que carga
+   el contraste: sobre papel el amarillo solo no llega a 3:1. */
+.boleta-fila[data-elegida="si"] {
+  border-color: var(--punto-aro);
+  box-shadow: inset 3px 0 0 var(--amarillo);
+}
+
+/* Las descartadas se hunden, no se tachan: siguen siendo legibles porque su
+   motivo es la mitad del argumento. */
+.boleta-fila[data-descartada="si"] {
+  background: var(--papel-hondo);
+  color: var(--tinta-media);
+}
+
+/* La marca NO es el único diferenciador: cada fila lleva su texto de motivo.
+   Nada acá se distingue sólo por color. */
+.boleta-fila[data-elegida="si"] .boleta-marca::before { content: "●"; }
+.boleta-fila[data-descartada="si"] .boleta-marca::before { content: "○"; }
+.boleta-fila[data-estado="sin-resolver"] .boleta-marca::before { content: "·"; }
+
+.boleta-mensaje {
+  margin: 0.5rem 0 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--linea-fuerte);
+  max-width: var(--medida);
+  font-family: var(--serif);
+  font-style: italic;
+}
+
+.boleta-motivo {
+  max-width: var(--medida);
+}
+
+/* El contrafáctico es la línea que convierte una opinión en un criterio: se
+   dice en la serif y en el tono del acento oscuro, que sí sostiene contraste
+   sobre papel (el amarillo plano no). */
+.contrafactual {
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  color: var(--oro);
+  max-width: var(--medida);
+}
+
+.consecuencia {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--linea);
+  font-variant-numeric: tabular-nums;
+}
+
+.consecuencia-detalle {
+  font-family: var(--mono);
+  color: var(--tinta-media);
+}
+
+/* `ignore` ganando NO es un fallo: es una decisión. No se atenúa. */
+.consecuencia[data-consecuencia="omitida"] {
+  color: var(--tinta);
+}
+
+.consecuencia[data-consecuencia="fallo"] {
+  color: var(--tinta);
+  border-top-color: var(--linea-fuerte);
+}
+
+.boton-epilogo {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+}
+
+/* ── EL ESCALONADO ─────────────────────────────────────────────────────────
+   Se lee "eligió esto… y descartó esto, y esto". No finge una deliberación
+   secuencial que no ocurrió: el modelo responde de una.
+
+   Mismo patrón de --i que ya usan las tarjetas (page.tsx:502). CSS a mano:
+   framer-motion se rechazó tres veces durante el pase visual. */
+
+.boleta-fila,
+.contrafactual {
+  animation: entrar-escalonado 320ms ease-out backwards;
+  animation-delay: calc(var(--i, 0) * 200ms);
+}
+
+@keyframes entrar-escalonado {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boleta-fila,
+  .contrafactual {
+    animation: none;
+  }
+}
