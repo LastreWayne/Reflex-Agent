@@ -5,6 +5,8 @@ import {
   DEFAULT_MAX_DECISIONS,
   DEFAULT_PARAMS,
   OFFLINE_VERDICTS,
+  PARADAS,
+  PARADA_EXPEDIENTE,
   buildBallot,
   buildFunnel,
   buildRun,
@@ -14,6 +16,7 @@ import {
   formatEvidence,
   formatEvidenceValue,
   offlineDecision,
+  paradaDeEtapa,
   parseParams,
   parseView,
   simulatedExecution,
@@ -451,5 +454,28 @@ describe("buildBallot", () => {
     expect(fila.status).toBe("descartada")
     expect(fila.reason).toBeNull()
     expect(fila.message).toBeNull()
+  })
+})
+
+describe("las paradas del visor", () => {
+  it("son cuatro: las etapas 4 y 5 comparten escenario", () => {
+    expect(PARADAS).toHaveLength(4)
+    expect(PARADA_EXPEDIENTE).toBe(3)
+  })
+
+  it("las tres primeras etapas mapean a su propia parada", () => {
+    expect(paradaDeEtapa(0)).toBe(0)
+    expect(paradaDeEtapa(1)).toBe(1)
+    expect(paradaDeEtapa(2)).toBe(2)
+  })
+
+  it("las etapas 4 y 5 caen las dos en el expediente", () => {
+    expect(paradaDeEtapa(3)).toBe(PARADA_EXPEDIENTE)
+    expect(paradaDeEtapa(4)).toBe(PARADA_EXPEDIENTE)
+  })
+
+  it("no se sale del rango por arriba ni por abajo", () => {
+    expect(paradaDeEtapa(-1)).toBe(0)
+    expect(paradaDeEtapa(99)).toBe(PARADA_EXPEDIENTE)
   })
 })

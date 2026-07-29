@@ -10,6 +10,8 @@ import { Mascota, type FaseMascota } from "./mascota.js"
 import { PestanasDock } from "./pestanas-dock.js"
 import { VidrioLiquido } from "./vidrio-liquido.js"
 import {
+  PARADAS,
+  PARADA_EXPEDIENTE,
   buildBallot,
   buildFunnel,
   buildRun,
@@ -18,6 +20,7 @@ import {
   formatDuration,
   formatEvidence,
   offlineDecision,
+  paradaDeEtapa,
   parseParams,
   parseView,
   simulatedExecution,
@@ -172,7 +175,11 @@ export default function Page() {
 
   /** Vista simple (un carril grande) o completa (los cinco en grilla). */
   const [vista, setVista] = useState<ViewMode>("simple")
-  /** Qué etapa muestra el visor de la vista simple, 0–4. */
+  /**
+   * Qué PARADA muestra el visor de la vista simple, 0–3 (`PARADA_EXPEDIENTE`
+   * es la última). No es una etapa del pipeline: las etapas 4 y 5 comparten
+   * la parada 3, así que este número nunca llega a 4.
+   */
   const [etapa, setEtapa] = useState(0)
   /** Hacia dónde se movió la última vez, para que el carril entre por ese lado. */
   const [sentido, setSentido] = useState<"adelante" | "atras">("adelante")
@@ -405,10 +412,11 @@ export default function Page() {
   }, [params])
 
   // El visor persigue al pipeline hasta que alguien toca las flechas.
+  // `paradaDeEtapa` es la que junta las etapas 4 y 5 en una sola parada.
   useEffect(() => {
     if (conduceLaPersona || carriles === 0) return
     setSentido("adelante")
-    setEtapa(carriles - 1)
+    setEtapa(paradaDeEtapa(carriles - 1))
   }, [carriles, conduceLaPersona])
 
   // El expediente muestra el caso más nuevo hasta que alguien toca la regleta.
@@ -427,8 +435,13 @@ export default function Page() {
     setParams((prev) => (prev === null ? prev : { ...prev, ...patch }))
   }
 
+  /**
+   * El visor navega PARADAS, no etapas: acota contra `PARADAS.length - 1`, no
+   * contra `ETAPAS.length - 1`. Las etapas 4 y 5 comparten la última parada
+   * (`PARADA_EXPEDIENTE`) — ver `paradaDeEtapa` en pipeline.ts.
+   */
   const irAEtapa = (proxima: number, deLaPersona: boolean) => {
-    const destino = proxima < 0 ? 0 : proxima > ETAPAS.length - 1 ? ETAPAS.length - 1 : proxima
+    const destino = proxima < 0 ? 0 : proxima > PARADAS.length - 1 ? PARADAS.length - 1 : proxima
     setSentido(destino >= etapa ? "adelante" : "atras")
     setEtapa(destino)
     if (deLaPersona) setConduceLaPersona(true)
@@ -438,10 +451,13 @@ export default function Page() {
    * Tocar una pestaña lleva el visor a esa etapa y baja hasta el motor: el
    * primer frame no muestra carriles, así que el salto es parte de lo que
    * hace la pestaña.
+   *
+   * `indice` es una de las CINCO etapas de la portada; se traduce a parada
+   * con `paradaDeEtapa` porque las pestañas 4 y 5 llevan las dos a la misma.
    */
   const verEtapa = (indice: number) => {
     setVista("simple")
-    irAEtapa(indice, true)
+    irAEtapa(paradaDeEtapa(indice), true)
     document.getElementById("escena")?.scrollIntoView({ block: "start" })
   }
 
@@ -479,7 +495,7 @@ export default function Page() {
    */
   const entidad = config ? config.entity.singular : CONFIGS[DOMAIN_IDS[0]].entity.singular
 
-  const acto = etapa >= 3 ? "expediente" : "recorrido"
+  const acto = etapa === PARADA_EXPEDIENTE ? "expediente" : "recorrido"
   const enEscena = decisiones[casoActivo] ?? null
   const accionEnEscena = acciones.find((a) => a.key === enEscena?.key) ?? null
 
@@ -522,6 +538,21 @@ export default function Page() {
       : listo
         ? `Corrida completa: ${ETAPAS.length} etapas, ${acciones.length} acciones.`
         : `Recorriendo el pipeline: etapa ${carriles === 0 ? 1 : carriles} de ${ETAPAS.length}.`
+
+  /*
+   * El número del pecho SIGUE SALIENDO DEL PIPELINE, no de la parada del
+   * visor. Para las paradas 0-2 ambos coinciden (hay una etapa por parada).
+   * En la parada del expediente la parada sola no alcanza — ahí viven las
+   * etapas 4 Y 5 — así que se desempata con la consecuencia del caso en
+   * escena: "04" mientras está pendiente, "05" cuando aterriza. Así el pecho
+   * dice "esto avanzó" aunque el decorado no se mueva.
+   */
+  const etapaMascota =
+    etapa === PARADA_EXPEDIENTE
+      ? accionEnEscena && accionEnEscena.status !== "pendiente"
+        ? 5
+        : 4
+      : etapa + 1
 
   const totales = [
     snapshot && carriles >= 1 ? snapshot.events.length : 0,
@@ -730,7 +761,14 @@ export default function Page() {
     "Lo que efectivamente se ejecutó",
   ]
 
-  const etapaActual = ETAPAS[etapa] ?? ETAPAS[0]
+  /*
+   * El rótulo de la parada del expediente nombra las DOS etapas que comparte
+   * ("Decisión" solo, o "Acción" solo, mentiría sobre cuál de las dos se está
+   * viendo — las dos, siempre). Las otras tres paradas tienen una sola etapa
+   * y usan su propio título.
+   */
+  const rotuloVisor =
+    etapa === PARADA_EXPEDIENTE ? "Decisión y acción" : (ETAPAS[etapa] ?? ETAPAS[0]).titulo
 
   return (
     <>
@@ -807,7 +845,9 @@ export default function Page() {
                 titulo: e.titulo,
                 texto: e.explica(entidad),
                 encendida: carriles > i,
-                mirando: vista === "simple" && etapa === i,
+                // Las pestañas 4 y 5 caen en la misma parada (el expediente),
+                // así que se comparan por parada, no por índice de etapa.
+                mirando: vista === "simple" && paradaDeEtapa(i) === etapa,
                 luz: (
                   <Lampara
                     tono={carriles > i ? "naranja" : "apagada"}
@@ -1004,10 +1044,10 @@ export default function Page() {
                 <span aria-hidden="true">←</span>
               </button>
               <p className="visor-posicion">
-                <span className="visor-etapa">{etapaActual.titulo}</span>
+                <span className="visor-etapa">{rotuloVisor}</span>
                 <span className="visor-cuenta">
                   <span className="cifra">{etapa + 1}</span> de{" "}
-                  <span className="cifra">{ETAPAS.length}</span>
+                  <span className="cifra">{PARADAS.length}</span>
                 </span>
               </p>
               <button
@@ -1015,7 +1055,7 @@ export default function Page() {
                 className="paso"
                 data-action="etapa-siguiente"
                 onClick={() => irAEtapa(etapa + 1, true)}
-                disabled={etapa === ETAPAS.length - 1}
+                disabled={etapa === PARADA_EXPEDIENTE}
                 aria-label="Etapa siguiente"
               >
                 <span aria-hidden="true">→</span>
@@ -1070,7 +1110,7 @@ export default function Page() {
                 </Carril>
               ))
             ) : (
-              <div className="escenario" data-visible={etapa >= 3 ? "si" : "no"}>
+              <div className="escenario" data-visible={etapa === PARADA_EXPEDIENTE ? "si" : "no"}>
                 {snapshot && (
                   <Expediente
                     funnel={buildFunnel(snapshot)}
@@ -1111,7 +1151,7 @@ export default function Page() {
               componente, y su useEffect de seguimiento del cursor arranca de nuevo en
               LUZ_EN_REPOSO: la luz pega un salto visible. No hay test que lo cache.
             */}
-            <Mascota fase={fase} etapa={vista === "full" ? null : etapa + 1} detalle={detalleMascota} />
+            <Mascota fase={fase} etapa={vista === "full" ? null : etapaMascota} detalle={detalleMascota} />
           </div>
         </section>
 

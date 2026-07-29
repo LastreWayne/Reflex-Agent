@@ -604,3 +604,24 @@ export function buildBallot(config: DomainConfig, verdict: Verdict | null): Ball
     }
   })
 }
+
+/**
+ * Las paradas del visor de la vista simple.
+ *
+ * Son CUATRO, no cinco: las etapas 4 y 5 comparten escenario (el expediente),
+ * así que como escenas son una sola. Ofrecer un quinto paso daba una flecha
+ * que no cambiaba nada — el humano lo cazó mirando el build de producción.
+ *
+ * Las cinco ETAPAS del pipeline no se tocan: son la tesis del proyecto y las
+ * pestañas de la portada las nombran. Lo que navega escenas es el visor.
+ */
+export const PARADAS = ["eventos", "intervalos", "detecciones", "expediente"] as const
+
+/** La parada donde viven las etapas 4 y 5. */
+export const PARADA_EXPEDIENTE = 3
+
+/** La parada del visor que le corresponde a una etapa del pipeline (0-4). */
+export function paradaDeEtapa(etapa: number): number {
+  if (etapa < 0) return 0
+  return etapa >= PARADA_EXPEDIENTE ? PARADA_EXPEDIENTE : etapa
+}

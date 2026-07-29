@@ -2765,3 +2765,14 @@ body {
     animation: none;
   }
 }
+
+/*
+ * EL ESCENARIO DEL EXPEDIENTE.
+ *
+ * `page.tsx` venía marcando `data-visible` desde la Task 10 y no había regla
+ * que lo leyera, así que el expediente se veía también durante los carriles
+ * 1-3. El atributo existía; el estilo no. Se cierra acá.
+ */
+.escenario[data-visible="no"] {
+  display: none;
+}
