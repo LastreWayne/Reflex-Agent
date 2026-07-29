@@ -1104,6 +1104,13 @@ export default function Page() {
               </div>
             )}
 
+            {/*
+              UN SOLO SITIO DE RENDER, fuera de las dos ramas de vista.
+              La mascota se reposiciona por CSS entre los actos; NO se mueve adentro
+              del ternario ni se monta por acto. Sacarla y volverla a poner remonta el
+              componente, y su useEffect de seguimiento del cursor arranca de nuevo en
+              LUZ_EN_REPOSO: la luz pega un salto visible. No hay test que lo cache.
+            */}
             <Mascota fase={fase} etapa={vista === "full" ? null : etapa + 1} detalle={detalleMascota} />
           </div>
         </section>
