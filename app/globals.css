@@ -1467,26 +1467,8 @@ body {
   color: var(--tinta-tenue);
 }
 
-.selector-vista {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--e2);
-}
-
-.selector-rotulo {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--tinta-tenue);
-  margin-right: var(--e1);
-}
-
 .mando:has(.visor-mando[data-oculto="si"]) {
   justify-content: flex-end;
-}
-
-.selector-vista .boton {
-  white-space: nowrap;
 }
 
 /* ── Los carriles ─────────────────────────────────────────────────────── */
@@ -2563,10 +2545,6 @@ body {
   .visor-mando {
     flex: none;
     justify-content: space-between;
-  }
-
-  .selector-vista {
-    justify-content: flex-end;
   }
 
   /* Cinco pestañas no entran de frente en un teléfono: la banda se arrastra

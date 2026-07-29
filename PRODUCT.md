@@ -76,10 +76,17 @@ Parámetros de URL que forman parte de cómo se evalúa el producto:
 
 **Dos despliegues distintos, a propósito:**
 
-- **público** — sin `GITHUB_TOKEN`, `GITHUB_REPO` ni `DISCORD_OPS_WEBHOOK`. Las
+- **público** — sin **ninguna** de las cuatro variables de destino:
+  `GITHUB_TOKEN`, `GITHUB_REPO`, `DISCORD_OPS_WEBHOOK` **ni `NTFY_TOPIC`**. Las
   rutas `/api/decide` y `/api/execute` son públicas y sin autenticación; la
   ausencia de esas variables **es** la mitigación, porque el executor corta
   antes de cualquier llamada de red y la tarjeta dice qué variable falta.
+  La lista son **los cuatro executors que salen a la red** —discord, ntfy,
+  webhook, github_issue—; `noop` y `state_mutation` nunca la tocan. Si aparece
+  un executor de red nuevo, **esta lista es parte de su definición de listo**:
+  quedó desactualizada una vez (faltaba `NTFY_TOPIC`, que además venía con
+  valor en `.env.example`) y una mitigación que enumera sólo protege si la
+  enumeración está al día.
 - **grabación** — con todos los secretos, para el video.
 
 VOLT (Energy Mobility) es una plataforma real de carga de vehículos eléctricos

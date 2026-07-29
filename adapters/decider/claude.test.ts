@@ -129,3 +129,59 @@ describe("createClaudeDecider — deliberación", () => {
     expect(verdict.decision.actionId).toBe("alert-ops")
   })
 })
+
+describe("createClaudeDecider — el contrato de UNA sola acción", () => {
+  /*
+   * `tool_choice: { type: "any" }` garantiza al menos una tool call, no
+   * exactamente una. Antes el código retornaba en el primer bloque y la
+   * segunda acción se perdía en silencio: el modelo pedía ejecutar dos cosas
+   * y el sistema hacía una, elegida por el orden de los bloques.
+   */
+  const segundoBloque = {
+    ...bloqueOk,
+    name: "create-ticket",
+    input: {
+      ...bloqueOk.input,
+      rejected: {
+        ignore: "No alcanza con ignorar.",
+        "alert-ops": "Ya se avisó por otro canal.",
+      },
+    },
+  }
+
+  it("tira DeciderError si el modelo devuelve DOS tool_use", async () => {
+    const decider = createClaudeDecider({ client: clienteQueDevuelve([bloqueOk, segundoBloque]) })
+    await expect(decider(detection, config)).rejects.toThrow(DeciderError)
+  })
+
+  it("el mensaje nombra las dos acciones, para que el fallo sea diagnosticable", async () => {
+    const decider = createClaudeDecider({ client: clienteQueDevuelve([bloqueOk, segundoBloque]) })
+    await expect(decider(detection, config)).rejects.toThrow(/alert-ops.*create-ticket/)
+  })
+
+  it("no tira con un solo tool_use aunque venga rodeado de otros bloques", async () => {
+    const client = clienteQueDevuelve([
+      { type: "thinking", thinking: "..." },
+      bloqueOk,
+      { type: "text", text: "listo" },
+    ])
+    const verdict = await createClaudeDecider({ client })(detection, config)
+    expect(verdict.decision.actionId).toBe("alert-ops")
+  })
+})
+
+describe("createClaudeDecider — input que no es un objeto", () => {
+  /*
+   * `block.input` es `unknown` para el SDK. Sin el guardia, `typeof
+   * input.message` sobre null lanza un TypeError crudo, que la ruta traduce a
+   * un 500 de "deploy mal armado" cuando en realidad falló el modelo (502).
+   */
+  it.each([
+    ["null", null],
+    ["un string", "alert-ops"],
+    ["un número", 42],
+  ])("tira DeciderError —no TypeError— si el input es %s", async (_caso, input) => {
+    const decider = createClaudeDecider({ client: clienteQueDevuelve([{ ...bloqueOk, input }]) })
+    await expect(decider(detection, config)).rejects.toThrow(DeciderError)
+  })
+})

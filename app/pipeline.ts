@@ -4,7 +4,6 @@ import { detect, suppress } from "../engine/detector.js"
 import { toIntervals } from "../engine/intervals.js"
 import type {
   Action,
-  Decision,
   Detection,
   DomainConfig,
   Interval,

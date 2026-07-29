@@ -76,33 +76,62 @@ export function createClaudeDecider(opts: ClaudeDeciderOptions): Decider {
       messages: [{ role: "user", content: user }],
     })
 
-    for (const block of response.content) {
-      if (block.type === "tool_use") {
-        const input = block.input as {
-          message?: unknown
-          reason?: unknown
-          rejected?: unknown
-          wouldChangeIf?: unknown
-        }
-        if (
-          typeof input.message !== "string" ||
-          typeof input.reason !== "string" ||
-          typeof input.wouldChangeIf !== "string"
-        ) {
-          throw new DeciderError(`La tool ${block.name} devolvió un input con forma inesperada`)
-        }
-        return {
-          decision: { actionId: block.name, reason: input.reason, message: input.message },
-          deliberation: {
-            rejected: normalizeRejected(input.rejected, block.name, config),
-            wouldChangeIf: input.wouldChangeIf,
-          },
-        }
-      }
+    const llamadas = response.content.filter((block) => block.type === "tool_use")
+
+    if (llamadas.length === 0) {
+      throw new DeciderError(
+        `Claude no eligió ninguna acción (stop_reason: ${response.stop_reason})`,
+      )
     }
 
-    throw new DeciderError(
-      `Claude no eligió ninguna acción (stop_reason: ${response.stop_reason})`,
-    )
+    /*
+     * `tool_choice: { type: "any" }` obliga a que haya AL MENOS una tool call,
+     * pero no la acota a una sola. El system promete "exactamente una acción",
+     * así que dos llamadas significan que el modelo rompió el contrato.
+     *
+     * Antes esto se recorría con un `for` que retornaba en el primer bloque:
+     * la segunda acción se descartaba en silencio y nadie se enteraba de que
+     * el modelo había querido ejecutar dos cosas. Preferimos fallar ruidoso —
+     * un 502 con el motivo — antes que ejecutar una de dos a la suerte del
+     * orden de los bloques.
+     */
+    if (llamadas.length > 1) {
+      throw new DeciderError(
+        `Claude eligió ${llamadas.length} acciones (${llamadas.map((b) => b.name).join(", ")}) y el contrato es exactamente una`,
+      )
+    }
+
+    const [llamada] = llamadas as [(typeof llamadas)[number]]
+
+    /*
+     * `block.input` viene tipado `unknown` por el SDK y puede ser null o un
+     * escalar. Sin este guardia, `typeof input.message` lanzaba un TypeError
+     * crudo en vez de un DeciderError, o sea un 500 de "deploy mal armado"
+     * donde en realidad hubo un fallo del modelo (502).
+     */
+    if (llamada.input === null || typeof llamada.input !== "object") {
+      throw new DeciderError(`La tool ${llamada.name} devolvió un input que no es un objeto`)
+    }
+
+    const input = llamada.input as {
+      message?: unknown
+      reason?: unknown
+      rejected?: unknown
+      wouldChangeIf?: unknown
+    }
+    if (
+      typeof input.message !== "string" ||
+      typeof input.reason !== "string" ||
+      typeof input.wouldChangeIf !== "string"
+    ) {
+      throw new DeciderError(`La tool ${llamada.name} devolvió un input con forma inesperada`)
+    }
+    return {
+      decision: { actionId: llamada.name, reason: input.reason, message: input.message },
+      deliberation: {
+        rejected: normalizeRejected(input.rejected, llamada.name, config),
+        wouldChangeIf: input.wouldChangeIf,
+      },
+    }
   }
 }

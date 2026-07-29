@@ -88,6 +88,44 @@ describe("POST /api/execute", () => {
     expect(executeAction).not.toHaveBeenCalled()
   })
 
+  it("la deliberación no puede colarse hasta el executor", async () => {
+    /*
+     * LA GARANTÍA QUE EL PRODUCTO ENCABEZA. La prosa deliberativa del modelo
+     * no tiene ninguna ruta hasta un issue de GitHub ni un canal de Discord
+     * —no por un filtro que alguien tenga que mantener, sino porque el camino
+     * no existe—. Hasta acá la única evidencia era una observación sobre el
+     * diff ("los archivos del executor no aparecen"), que es un argumento
+     * sobre lo que NO se tocó, no sobre lo que el sistema hace.
+     *
+     * Acá se construye a mano el body que un atacante mandaría —la pantalla
+     * nunca lo emite— y se afirma sobre las CLAVES que llegan al executor, no
+     * sobre el status. `ExecuteBodySchema.decision` es `DecisionSchema`, y un
+     * z.object() de zod descarta las claves desconocidas al parsear.
+     *
+     * Verificado por inversión: con `DecisionSchema.loose()` el test falla con
+     * la clave `deliberation` de más en el array recibido.
+     */
+    const response = await execute(
+      post({
+        domain: "volt",
+        actionId: "ignore",
+        decision: {
+          ...decision,
+          deliberation: {
+            rejected: [{ actionId: "alert-ops", reason: "prosa que no debe viajar" }],
+            wouldChangeIf: "prosa que no debe viajar",
+          },
+        },
+        detection,
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect(executeAction).toHaveBeenCalled()
+    const pasada = vi.mocked(executeAction).mock.calls[0]![1]
+    expect(Object.keys(pasada).sort()).toEqual(["actionId", "message", "reason"])
+    expect(JSON.stringify(pasada)).not.toContain("prosa que no debe viajar")
+  })
+
   it("ejecuta una acción resuelta desde el config del servidor", async () => {
     const response = await execute(post({ domain: "volt", actionId: "ignore", decision, detection }))
     expect(response.status).toBe(200)

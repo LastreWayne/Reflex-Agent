@@ -33,7 +33,6 @@ export const CONFIGS: Record<DomainId, DomainConfig> = {
  * con hasta 6 campos numéricos en duration_vs_baseline) con harto margen.
  */
 const MAX_ID_LENGTH = 200 // ruleId, entityId, actionId: los reales miden <20
-const MAX_TIMESTAMP_LENGTH = 40 // ISO 8601 con milisegundos y offset: ~24-30
 const MAX_KEY_LENGTH = 500 // dedupKey/cooldownKey = `${ruleId}:${entityId}:${iso}`
 const MAX_REASON_LENGTH = 500 // "Una frase, para el log." (prompt.ts:29)
 const MAX_MESSAGE_LENGTH = 2000 // mensaje a una persona real, unas oraciones
@@ -66,7 +65,19 @@ export const DeliberationSchema = z.object({
 export const DetectionSchema = z.object({
   ruleId: z.string().min(1).max(MAX_ID_LENGTH),
   entityId: z.string().min(1).max(MAX_ID_LENGTH),
-  detectedAt: z.string().max(MAX_TIMESTAMP_LENGTH),
+  /*
+   * ISO 8601 de verdad, no un string acotado por largo. El motor ya aprendió
+   * esta lección una vez: un timestamp que no parsea hace `Date.parse`
+   * devolver NaN, y con NaN `duration_in_state` no dispara NUNCA mientras
+   * `absence_of_events` dispara SIEMPRE — sin un solo error. El arreglo se
+   * aplicó a NormalizedEventSchema (engine/schema.ts:9) y no acá, que es
+   * justo el borde donde la entrada es hostil.
+   *
+   * Además `detectedAt` sale de este esquema y entra sin cercar al prompt
+   * (adapters/decider/prompt.ts) y al embed de Discord como su `timestamp`,
+   * que exige ISO8601: un valor malformado hacía 400 el webhook.
+   */
+  detectedAt: z.iso.datetime(),
   severity: SeveritySchema,
   // zod no puede acotar el tamaño serializado de un record directamente, así
   // que se cotea a mano: cualquier `evidence` cuyo JSON pase de
