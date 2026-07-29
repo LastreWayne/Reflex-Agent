@@ -29,6 +29,7 @@ yarn-error.log*
 # Editores / SO
 .DS_Store
 Thumbs.db
+desktop.ini
 .idea/
 *.swp
 
