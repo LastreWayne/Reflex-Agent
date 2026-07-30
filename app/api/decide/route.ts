@@ -20,12 +20,25 @@ export async function POST(request: Request) {
   const model = process.env.DECIDER_MODEL ?? "claude-sonnet-5"
   const fast = process.env.DECIDER_FAST === "1"
 
+  // MEDIDO EN EL PRIMER DEPLOY REAL, no supuesto: `new Anthropic()` NO tira
+  // cuando falta la clave. El SDK resuelve la autenticación recién al mandar
+  // la request, así que el fallo caía en el try de ABAJO y salía como 502
+  // —"falló el modelo"— cuando en realidad era el deploy sin variable. Es
+  // exactamente el caso que la separación 500/502 existe para distinguir, y
+  // era el único que no cubría. Por eso la clave se chequea a mano acá.
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return Response.json(
+      { error: "configuración del servidor inválida: falta ANTHROPIC_API_KEY" },
+      { status: 500 },
+    )
+  }
+
   // La construcción va FUERA del try/catch de la decisión, a propósito.
   // `createClaudeDecider` tira DeciderError cuando la configuración es
-  // inválida (p. ej. fast mode en un modelo que no lo soporta) y el SDK tira
-  // cuando falta la clave: eso es un deploy mal armado (500), no un fallo del
-  // modelo (502). Con un solo catch, un deploy roto se vería como un hipo de
-  // Claude y nadie lo arreglaría a tiempo.
+  // inválida (p. ej. fast mode en un modelo que no lo soporta): eso es un
+  // deploy mal armado (500), no un fallo del modelo (502). Con un solo catch,
+  // un deploy roto se vería como un hipo de Claude y nadie lo arreglaría a
+  // tiempo.
   let decider: Decider
   try {
     decider = createClaudeDecider({ client: new Anthropic(), model, fast })

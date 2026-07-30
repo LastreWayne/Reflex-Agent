@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { Detection } from "../../engine/schema.js"
 import { POST as decide } from "./decide/route.js"
 import { POST as execute } from "./execute/route.js"
@@ -177,6 +177,18 @@ describe("POST /api/execute", () => {
 })
 
 describe("POST /api/decide", () => {
+  /*
+   * La ruta ahora exige ANTHROPIC_API_KEY antes de construir el decisor, así
+   * que sin esto CUALQUIER test de este bloque devolvería 500 y estaría
+   * probando el guardia en vez de lo suyo. El SDK está mockeado: el valor no
+   * sale a ningún lado, sólo tiene que existir.
+   *
+   * El test del guardia la borra explícitamente con stubEnv("").
+   */
+  beforeEach(() => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test")
+  })
+
   it("rechaza un body inválido", async () => {
     const response = await decide(post({ domain: "volt" }))
     expect(response.status).toBe(400)
@@ -244,6 +256,26 @@ describe("POST /api/decide", () => {
     expect(create).not.toHaveBeenCalled()
     const body = (await response.json()) as { error: string }
     expect(body.error).toContain("configuración del servidor inválida")
+  })
+
+  it("sin ANTHROPIC_API_KEY devuelve 500, no 502", async () => {
+    /*
+     * MEDIDO EN EL PRIMER DEPLOY REAL. `new Anthropic()` no tira cuando falta
+     * la clave: el SDK resuelve la autenticación al mandar la request, así que
+     * el fallo caía en el catch de la decisión y salía 502 —"falló el
+     * modelo"— cuando en realidad era el deploy sin variable.
+     *
+     * O sea que el único caso que la separación 500/502 NO cubría era
+     * justamente el más probable de todos en un deploy nuevo. Doce tasks y una
+     * review de rama completa no lo cazaron porque ningún test corría sin la
+     * clave y el camino en vivo siempre la tuvo.
+     */
+    vi.stubEnv("ANTHROPIC_API_KEY", "")
+    const response = await decide(post({ domain: "volt", detection }))
+    expect(response.status).toBe(500)
+    expect(create).not.toHaveBeenCalled()
+    const body = (await response.json()) as { error: string }
+    expect(body.error).toContain("ANTHROPIC_API_KEY")
   })
 
   it("un fallo del MODELO devuelve 502", async () => {
