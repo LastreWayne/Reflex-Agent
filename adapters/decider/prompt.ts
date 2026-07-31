@@ -59,7 +59,10 @@ export function buildTools(config: DomainConfig): DeciderTool[] {
         properties: {
           message: {
             type: "string",
-            description: "El texto que le llega a la persona. Escribilo en el tono del dominio.",
+            // Misma regla de unidades que `wouldChangeIf`, y acá pesa más: es
+            // el único campo que una persona real lee de punta a punta.
+            description:
+              "El texto que le llega a la persona. Escribilo en el tono del dominio, con los números en unidades humanas y sin nombrar campos internos del motor.",
           },
           reason: {
             type: "string",
@@ -71,10 +74,28 @@ export function buildTools(config: DomainConfig): DeciderTool[] {
             required: otras.map((a) => a.id),
             additionalProperties: false,
           },
+          /*
+           * LAS DOS ÚLTIMAS LÍNEAS DE ESTA DESCRIPTION SON UN ARREGLO, no
+           * relleno. Medido en la Task 7 (1 de 3 sondas) y visto después en
+           * el deploy público: el modelo escribía "Si durationMs fuera menor
+           * al thresholdMs (ej. menos de 600000ms)" — nombres de campos
+           * internos y milisegundos crudos, en la LÍNEA DE CIERRE del
+           * expediente, que es lo último que lee alguien que vino a juzgar si
+           * esto tiene criterio.
+           *
+           * La causa era esta misma description: pedía "el número que
+           * importa" sin decir en qué unidad, y las claves del evidence se
+           * llaman durationMs y thresholdMs, así que repetirlas era el camino
+           * de menor resistencia. El system prohíbe "explicar el sistema"
+           * pero nunca prohibió nombrar campos.
+           *
+           * Va acá y no en el system a propósito: el input_schema es el único
+           * territorio que el Global Constraint de la fase permite tocar.
+           */
           wouldChangeIf: {
             type: "string",
             description:
-              "Qué tendría que haber sido distinto en la evidencia para que eligieras otra acción. Una frase concreta, con el número que importa.",
+              "Qué tendría que haber sido distinto en la evidencia para que eligieras otra acción. Una frase concreta, con el número que importa en unidades humanas —minutos, horas, veces— y NUNCA en milisegundos. No nombres campos internos del motor (durationMs, thresholdMs, windowMs y similares): quien lee esto no conoce el esquema.",
           },
         },
         required: ["message", "reason", "rejected", "wouldChangeIf"],

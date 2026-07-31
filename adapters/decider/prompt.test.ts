@@ -63,6 +63,30 @@ describe("buildTools", () => {
     }
   })
 
+  /*
+   * Estos dos tests prueban que la INSTRUCCIÓN está, no que el modelo la
+   * obedezca — eso sólo lo dicen las sondas contra la API real, y quedaron
+   * en el ledger. Su valor es que nadie borre la regla por accidente al
+   * reescribir una description, que es exactamente cómo se abrió la fuga: la
+   * description pedía "el número que importa" sin decir la unidad.
+   */
+  it("el contrafáctico pide unidades humanas y prohíbe los campos internos", () => {
+    for (const tool of buildTools(config)) {
+      const d = tool.input_schema.properties.wouldChangeIf.description
+      expect(d).toMatch(/unidades humanas/i)
+      expect(d).toMatch(/milisegundos/i)
+      expect(d).toMatch(/durationMs/)
+    }
+  })
+
+  it("el mensaje a la persona lleva la misma regla de unidades", () => {
+    for (const tool of buildTools(config)) {
+      const d = tool.input_schema.properties.message.description
+      expect(d).toMatch(/unidades humanas/i)
+      expect(d).toMatch(/campos internos/i)
+    }
+  })
+
   it("no filtra la config de las acciones en las tools", () => {
     const serialized = JSON.stringify(buildTools(config))
     expect(serialized).not.toContain("env:")
